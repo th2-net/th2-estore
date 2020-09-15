@@ -88,6 +88,7 @@ archivesBaseName = 'event-store'
 
 dependencies {
     compile project(':grpc-event-store')
+
     api "io.vertx:vertx-grpc:${vertxVersion}"
     compile "com.exactpro.cradle:cradle-cassandra:${cradleVersion}"
     compile "com.exactpro.cradle:cradle-core:${cradleVersion}"
