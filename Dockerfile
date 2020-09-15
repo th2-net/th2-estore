@@ -13,5 +13,5 @@ ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_PASSWORD=guest \
     GRPC_PORT=8080
 WORKDIR /home
-COPY --from=build ./ .
+COPY --from=build /home/gradle/build/docker .
 ENTRYPOINT ["/home/event-store/bin/event-store", "/home/event-store/etc/config.yml"]
