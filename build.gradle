@@ -52,14 +52,15 @@ allprojects {
 
     jar {
         manifest {
-            attributes('Created-By': System.getProperty('java.version') + ' (' + System.getProperty('java.vendor') + ')')
-            attributes('Specification-Title': '')
-            attributes('Specification-Vendor': 'Exactpro Systems LLC')
-            attributes('Implementation-Title': "${project.name}")
-            attributes('Implementation-Vendor': 'Exactpro Systems LLC')
-            attributes('Implementation-Vendor-Id': 'com.exactpro')
-            attributes('Implementation-Version': "${version}")
-            attributes('Implementation-Version-Date': getDate())
+            attributes(
+                    'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                    'Specification-Title':      '',
+                    'Specification-Vendor':     'Exactpro Systems LLC',
+                    'Implementation-Title':     project.archivesBaseName,
+                    'Implementation-Vendor':    'Exactpro Systems LLC',
+                    'Implementation-Vendor-Id': 'com.exactpro',
+                    'Implementation-Version':   project.version
+            )
         }
     }
 
@@ -78,16 +79,33 @@ allprojects {
         }
     }
 
-    artifactoryPublish.skip = false
+    artifactory {
+        publish {
+            contextUrl = "${artifactory_url}"
+            repository {
+                repoKey = "${artifactory_deploy_repo_key}" // The Artifactory repository key to publish to
+                username = "${artifactory_user}" // The publisher user name
+                password = "${artifactory_password}" // The publisher password
+            }
+            defaults {
+                // Reference to Gradle publications defined in the build script.
+                // This is how we tell the Artifactory Plugin which artifacts should be
+                // published to Artifactory.
+                publications('mavenJava')
+                publishArtifacts = true
+                publishBuildInfo = true
+                // Properties to be attached to the published artifacts.
+                publishPom = true
+            }
+        }
+    }
 }
 
 apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
-archivesBaseName = 'event-store'
-
 dependencies {
-    compile project(':grpc-event-store')
+    compile project(':th2-grpc-event-store')
 
     api "io.vertx:vertx-grpc:${vertxVersion}"
     compile "com.exactpro.cradle:cradle-cassandra:${cradleVersion}"
@@ -98,22 +116,16 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            artifactId = 'th2-event-store'
-        }
-    }
-}
+artifactoryPublish.skip = true
 
 application {
     mainClassName 'com.exactpro.th2.eventstore.EventStoreMain'
 }
 
-applicationName = archivesBaseName
+applicationName = 'service'
 
 distTar {
-    archiveName "${archivesBaseName}.tar"
+    archiveName "${applicationName}.tar"
 }
 
 dockerPrepare {
@@ -124,11 +136,5 @@ docker {
     name docker_image_name
     tag 'local-version', docker_image_name
 
-    copySpec.from(tarTree("$buildDir/distributions/${archivesBaseName}.tar"))
-}
-
-static def getDate() {
-    def date = new Date()
-    def formattedDate = date.format('yyyyMMdd-HH:mm:ss.SSS')
-    return formattedDate
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }

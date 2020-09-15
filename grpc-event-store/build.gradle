@@ -59,13 +59,10 @@ task zipProtobuf (type: Zip) {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'th2-grpc-event-store'
             artifact source: zipProtobuf, extension: 'zip'
         }
     }
 }
-
-artifactoryPublish.skip = false
 
 clean {
     delete genDir
