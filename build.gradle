@@ -111,6 +111,7 @@ dependencies {
     compile "com.exactpro.cradle:cradle-cassandra:${cradleVersion}"
     compile "com.exactpro.cradle:cradle-core:${cradleVersion}"
     compile "com.exactpro.th2:th2-common:${th2CommonVersion}"
+    compile "com.exactpro.th2:th2-store-common:${th2StoreCommonVersion}"
     implementation "io.vertx:vertx-rx-java2:$vertxVersion"
 
     testCompile group: 'junit', name: 'junit', version: '4.12'
