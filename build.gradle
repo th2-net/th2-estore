@@ -1,15 +1,94 @@
 plugins {
     id 'com.google.protobuf' version '0.8.8' apply false
+    id 'com.palantir.docker' version '0.25.0' apply false
+    id "de.undercouch.download" version "4.0.4" apply false
     id "com.jfrog.artifactory" version '4.15.1'
 }
 
 allprojects {
+    apply plugin: 'java'
+    apply plugin: 'java-library'
+    apply plugin: 'maven-publish'
     apply plugin: 'com.jfrog.artifactory'
 
-    artifactoryPublish.skip = true
+    ext {
+        sharedDir = file("${project.rootDir}/shared")
+        vertxVersion = '3.8.5'
+        vertxGrpcVersion = '1.25.0'
+        junitJupiterEngineVersion = '5.4.0'
+
+        cradleVersion = '1.5-SNAPSHOT'
+        th2CommonVersion = '1.3.0'
+    }
+
+    group = 'com.exactpro.th2'
+    version = release_version
+
+    sourceCompatibility = 1.11
+    targetCompatibility = 1.11
+
+    repositories {
+        maven {
+            name 'MavenLocal'
+            url sharedDir
+        }
+        mavenCentral()
+        maven {
+            name 'Schema snapshot'
+            url 'http://artifactory5.exp.exactpro.com/artifactory/th2-schema-snapshot-local'
+        }
+        maven {
+            name 'Artifactory snapshot'
+            url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
+        }
+        maven {
+            name 'Artifactory release'
+            url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
+        }
+
+        configurations.all {
+            resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+            resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+        }
+    }
+
+    jar {
+        manifest {
+            attributes(
+                    'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                    'Specification-Title':      '',
+                    'Specification-Vendor':     'Exactpro Systems LLC',
+                    'Implementation-Title':     project.archivesBaseName,
+                    'Implementation-Vendor':    'Exactpro Systems LLC',
+                    'Implementation-Vendor-Id': 'com.exactpro',
+                    'Implementation-Version':   project.version
+            )
+        }
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+            }
+        }
+
+        repositories {
+            maven {
+                name = 'localRepo'
+                url = sharedDir
+            }
+        }
+    }
 
     artifactory {
         publish {
+            contextUrl = "${artifactory_url}"
+            repository {
+                repoKey = "${artifactory_deploy_repo_key}" // The Artifactory repository key to publish to
+                username = "${artifactory_user}" // The publisher user name
+                password = "${artifactory_password}" // The publisher password
+            }
             defaults {
                 // Reference to Gradle publications defined in the build script.
                 // This is how we tell the Artifactory Plugin which artifacts should be
@@ -24,46 +103,41 @@ allprojects {
     }
 }
 
-subprojects {
-    apply plugin: 'java'
-    apply plugin: 'java-library'
+apply plugin: 'application'
+apply plugin: 'com.palantir.docker'
 
-    ext {
-        sharedDir                   = file("${project.rootDir}/shared")
-        vertxVersion                = '3.8.5'
-        vertxGrpcVersion            = '1.25.0'
-        junitJupiterEngineVersion   = '5.4.0'
+dependencies {
+    compile project(':th2-grpc-event-store')
 
-        cradleVersion               = '1.4-SNAPSHOT'
-        th2CommonVersion            = '1.1-SNAPSHOT'
-        th2ConnectivityVersion      = '1.1-SNAPSHOT'
-    }
+    api "io.vertx:vertx-grpc:${vertxVersion}"
+    compile "com.exactpro.cradle:cradle-cassandra:${cradleVersion}"
+    compile "com.exactpro.cradle:cradle-core:${cradleVersion}"
+    compile "com.exactpro.th2:th2-common:1.1-SNAPSHOT" // FIXME: migrate to <version from master>-schema.<build number>, for examle 1.3.0-schema.+
+    compile "com.exactpro.th2:th2-store-common:1.3.0"
+    implementation "io.vertx:vertx-rx-java2:$vertxVersion"
 
-    group = 'com.exactpro.th2'
-    version = "${version_major}.${version_minor}-SNAPSHOT"
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
 
-    sourceCompatibility = 1.11
-    targetCompatibility = 1.11
+artifactoryPublish.skip = true
 
+application {
+    mainClassName 'com.exactpro.th2.eventstore.EventStoreMain'
+}
 
-    repositories {
-        maven {
-            name 'MavenLocal'
-            url sharedDir
-        }
-        mavenCentral()
-        maven {
-            name 'Schema snapshot'
-            url 'http://artifactory5.exp.exactpro.com/artifactory/th2-schema-snapshot-local'
-        }
-        maven {
-            name 'Artifactory'
-            url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
-        }
+applicationName = 'service'
 
-        configurations.all {
-            resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-            resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
-        }
-    }
+distTar {
+    archiveName "${applicationName}.tar"
+}
+
+dockerPrepare {
+    dependsOn distTar
+}
+
+docker {
+    name docker_image_name
+    tag 'local-version', docker_image_name
+
+    copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }

@@ -80,22 +80,10 @@ task zipProtobuf (type: Zip) {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            artifactId 'th2-grpc-event-store'
-
-            from components.java
             artifact source: zipProtobuf, extension: 'zip'
         }
     }
-
-    repositories {
-        maven {
-            name = 'localRepo'
-            url = sharedDir
-        }
-    }
 }
-
-artifactoryPublish.skip = false
 
 clean {
     delete genDir

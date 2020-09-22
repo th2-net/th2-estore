@@ -1,7 +1,4 @@
-rootProject.name = 'EventStore'
+rootProject.name = 'th2-event-store'
 
 include 'grpc-event-store'
-include 'common'
-include 'docker'
-include 'docker:event-store'
-include 'docker:message-store'
+project(':grpc-event-store').name = 'th2-grpc-event-store'
