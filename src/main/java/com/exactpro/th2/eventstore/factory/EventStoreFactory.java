@@ -26,6 +26,7 @@ import com.exactpro.th2.infra.grpc.EventBatch;
 import com.exactpro.th2.schema.factory.CommonFactory;
 import com.exactpro.th2.schema.message.MessageRouter;
 
+//FIXME: Is this class redundant?
 public class EventStoreFactory extends CommonFactory {
 
     private static final Path CONFIG_DEFAULT_PATH = Path.of("/var/th2/config/");

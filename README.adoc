@@ -31,21 +31,6 @@ Need RabbitMQ, MessageRouter, Cradle, GRPC (EventStore) and custom configuration
 
 === RabbitMQ
 
-==== Event store
-Event store subscribe on all queues which have attribute ```in```
-
-==== Message store
-For parsed message batch, It subscribe on all queues which have attributes ```in``` and ```parsed```.
-
-For raw message batch, It subscribe on all queues which have attributes ```in``` and ```raw```.
-
-=== Custom configuration file
-[source, json]
-----
-{
-  "cradleInstanceName": "instanceName"
-}
-----
 Event store env variables:
 ```
 GRPC_PORT=7878

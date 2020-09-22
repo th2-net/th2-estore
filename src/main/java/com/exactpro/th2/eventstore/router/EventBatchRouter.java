@@ -31,7 +31,7 @@ public class EventBatchRouter extends AbstractRabbitMessageRouter<EventBatch> {
     }
 
     @Override
-    protected Map<String, EventBatch> getTargetQueueAliasesAndMessagesToSend(EventBatch eventBatch) {
+    protected Map<String, EventBatch> findByFilter(Map<String, QueueConfiguration> queues, EventBatch msg) {
         return Collections.emptyMap();
     }
 }
