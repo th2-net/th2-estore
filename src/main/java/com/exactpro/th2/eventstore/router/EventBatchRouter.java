@@ -21,12 +21,14 @@ import com.exactpro.th2.schema.message.MessageQueue;
 import com.exactpro.th2.schema.message.configuration.QueueConfiguration;
 import com.exactpro.th2.schema.message.impl.rabbitmq.AbstractRabbitMessageRouter;
 import com.exactpro.th2.schema.message.impl.rabbitmq.configuration.RabbitMQConfiguration;
+import com.rabbitmq.client.Connection;
 
 public class EventBatchRouter extends AbstractRabbitMessageRouter<EventBatch> {
+
     @Override
-    protected MessageQueue<EventBatch> createQueue(RabbitMQConfiguration rabbitMQConfiguration, QueueConfiguration queueConfiguration) {
+    protected MessageQueue<EventBatch> createQueue(Connection connection, String subscriberName, QueueConfiguration queueConfiguration) {
         EventBatchQueue eventBatchQueue = new EventBatchQueue();
-        eventBatchQueue.init(rabbitMQConfiguration, queueConfiguration);
+        eventBatchQueue.init(connection, subscriberName, queueConfiguration);
         return eventBatchQueue;
     }
 

@@ -22,22 +22,23 @@ import com.exactpro.th2.schema.message.configuration.QueueConfiguration;
 import com.exactpro.th2.schema.message.impl.rabbitmq.AbstractRabbitQueue;
 import com.exactpro.th2.schema.message.impl.rabbitmq.configuration.RabbitMQConfiguration;
 import com.exactpro.th2.schema.message.impl.rabbitmq.configuration.SubscribeTarget;
+import com.rabbitmq.client.Connection;
 
 public class EventBatchQueue extends AbstractRabbitQueue<EventBatch> {
 
     @Override
-    protected MessageSender<EventBatch> createSender(@NotNull RabbitMQConfiguration rabbitMQConfiguration, @NotNull QueueConfiguration queueConfiguration) {
+    protected MessageSender<EventBatch> createSender(@NotNull Connection connection, @NotNull QueueConfiguration queueConfiguration) {
         return null;
     }
 
     @Override
-    protected MessageSubscriber<EventBatch> createSubscriber(@NotNull RabbitMQConfiguration rabbitMQConfiguration, @NotNull QueueConfiguration queueConfiguration) {
+    protected MessageSubscriber<EventBatch> createSubscriber(@NotNull Connection connection, String subscriberName, @NotNull QueueConfiguration queueConfiguration) {
         EventBatchSubscriber eventBatchSubscriber = new EventBatchSubscriber();
         var subscribeTarget = SubscribeTarget.builder()
                 .routingKey(queueConfiguration.getName())
                 .queue(queueConfiguration.getQueue())
                 .build();
-        eventBatchSubscriber.init(rabbitMQConfiguration, queueConfiguration.getExchange(), subscribeTarget);
+        eventBatchSubscriber.init(connection, queueConfiguration.getExchange(), subscriberName, subscribeTarget);
         return eventBatchSubscriber;
     }
 }
