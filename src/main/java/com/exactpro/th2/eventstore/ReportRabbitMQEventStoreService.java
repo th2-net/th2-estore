@@ -45,7 +45,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
 
     @Override
     protected String[] getAttributes() {
-        return new String[]{"in"};
+        return new String[]{"subscribe", "event"};
     }
 
     @Override
