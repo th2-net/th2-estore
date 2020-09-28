@@ -13,6 +13,7 @@
 package com.exactpro.th2.eventstore;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Arrays;
 
 import org.apache.commons.lang3.ObjectUtils;
@@ -94,7 +95,9 @@ public class EventStoreVerticle extends AbstractVerticle {
         return vertx.<Void>rxExecuteBlocking(AsyncHelper
             .createHandler(() -> {
                 try {
-                    cradleManager.init(factory.getCustomConfiguration(StoreConfiguration.class).getCradleInstanceName());
+                    String cradleInstanceName = InetAddress.getLocalHost().getHostName();
+                    cradleManager.init(cradleInstanceName);
+                    logger.info("Cradle manager init successfully with {} instance name", cradleInstanceName);
                 } catch (CradleStorageException e) {
                     logger.error("could not init cradle manager: {}", e.getMessage(), e);
                 }
