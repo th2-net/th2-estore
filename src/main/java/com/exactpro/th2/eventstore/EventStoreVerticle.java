@@ -28,7 +28,6 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.eventstore.factory.EventStoreFactory;
 import com.exactpro.th2.schema.cradle.CradleConfiguration;
-import com.exactpro.th2.store.common.configuration.StoreConfiguration;
 import com.exactpro.th2.store.common.utils.AsyncHelper;
 
 import io.reactivex.Completable;
