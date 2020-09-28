@@ -15,6 +15,7 @@ package com.exactpro.th2.eventstore;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,8 +83,7 @@ public class EventStoreVerticle extends AbstractVerticle {
 
     private Completable startGrpcService() {
         return AsyncResultCompletable.toCompletable(h ->
-            VertxServerBuilder.forAddress(vertx.getDelegate(),
-                factory.getGrpcHost(),
+            VertxServerBuilder.forPort(vertx.getDelegate(),
                 factory.getGrpcPort())
                 .addService(new ReportEventStoreService(cradleManager, vertx))
                 .build().start(h)
