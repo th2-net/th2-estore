@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.exactpro.th2.eventstore;
+package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.messages.StoredMessageId;
@@ -22,10 +22,10 @@ import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
 import com.exactpro.th2.infra.grpc.Event;
-import com.exactpro.th2.eventstore.grpc.EventStoreServiceGrpc.EventStoreServiceVertxImplBase;
-import com.exactpro.th2.eventstore.grpc.Response;
-import com.exactpro.th2.eventstore.grpc.StoreEventBatchRequest;
-import com.exactpro.th2.eventstore.grpc.StoreEventRequest;
+import com.exactpro.th2.estore.grpc.EventStoreServiceGrpc.EventStoreServiceVertxImplBase;
+import com.exactpro.th2.estore.grpc.Response;
+import com.exactpro.th2.estore.grpc.StoreEventBatchRequest;
+import com.exactpro.th2.estore.grpc.StoreEventRequest;
 import com.exactpro.th2.infra.grpc.MessageID;
 import com.exactpro.th2.store.common.utils.AsyncHelper;
 import com.exactpro.th2.store.common.utils.ProtoUtil;

@@ -1,4 +1,4 @@
-rootProject.name = 'th2-event-store'
+rootProject.name = 'estore'
 
-include 'grpc-event-store'
-project(':grpc-event-store').name = 'th2-grpc-event-store'
+include 'grpc-estore'
+project(':grpc-estore').name = 'grpc-estore'

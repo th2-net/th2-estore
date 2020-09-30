@@ -46,7 +46,7 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:th2-bom:1.0.3')
+        api platform('com.exactpro.th2:bom:2.0.+')
     }
 
     jar {
@@ -104,10 +104,10 @@ apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
 dependencies {
-    implementation project(':th2-grpc-event-store')
+    implementation project(':grpc-estore')
 
-    implementation "com.exactpro.th2:th2-common"
-    implementation "com.exactpro.th2:th2-store-common"
+    implementation "com.exactpro.th2:common"
+    implementation "com.exactpro.th2:store-common"
     implementation "com.exactpro.cradle:cradle-cassandra"
     implementation "com.exactpro.cradle:cradle-core"
 
