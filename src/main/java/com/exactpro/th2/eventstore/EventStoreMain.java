@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.th2.eventstore.factory.EventStoreFactory;
+import com.exactpro.th2.metrics.CommonMetrics;
 
 import io.vertx.core.Vertx;
 
@@ -25,12 +26,15 @@ public class EventStoreMain {
 
     public static void main(String[] args) {
         try {
+            CommonMetrics.setLiveness(true);
             EventStoreFactory factory = EventStoreFactory.createFromArguments(args);
             Vertx vertx = Vertx.vertx();
             EventStoreVerticle eventStoreVerticle = new EventStoreVerticle(factory);
             vertx.deployVerticle(eventStoreVerticle);
             LOGGER.info("event store started on {} port", factory.getGrpcPort());
         } catch (Exception e) {
+            CommonMetrics.setLiveness(false);
+            CommonMetrics.setReadiness(false);
             LOGGER.error("fatal error: {}", e.getMessage(), e);
             System.exit(-1);
         }

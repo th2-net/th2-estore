@@ -15,6 +15,7 @@ package com.exactpro.th2.eventstore;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -27,6 +28,7 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnection;
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.eventstore.factory.EventStoreFactory;
+import com.exactpro.th2.metrics.CommonMetrics;
 import com.exactpro.th2.schema.cradle.CradleConfiguration;
 import com.exactpro.th2.store.common.utils.AsyncHelper;
 
@@ -39,6 +41,7 @@ public class EventStoreVerticle extends AbstractVerticle {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
     private final CradleManager cradleManager;
     private final EventStoreFactory factory;
+    private final AtomicInteger readness = new AtomicInteger(0); //FIXME: Remove with GRPC part
 
     public EventStoreVerticle(EventStoreFactory factory) throws IOException {
         CradleConfiguration cradleConfiguration = factory.getCradleConfiguration();
@@ -75,6 +78,9 @@ public class EventStoreVerticle extends AbstractVerticle {
             try {
                 ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
                 store.start();
+                if (readness.incrementAndGet() > 1) {
+                    CommonMetrics.setReadiness(true);
+                }
             } catch (Exception e) {
                 logger.error("Can not start rabbit mq event store", e);
             }
@@ -97,6 +103,9 @@ public class EventStoreVerticle extends AbstractVerticle {
                     String cradleInstanceName = InetAddress.getLocalHost().getHostName();
                     cradleManager.init(cradleInstanceName);
                     logger.info("Cradle manager init successfully with {} instance name", cradleInstanceName);
+                    if (readness.incrementAndGet() > 1) {
+                        CommonMetrics.setReadiness(true);
+                    }
                 } catch (CradleStorageException e) {
                     logger.error("could not init cradle manager: {}", e.getMessage(), e);
                 }
