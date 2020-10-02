@@ -104,9 +104,9 @@ apply plugin: 'application'
 apply plugin: 'com.palantir.docker'
 
 dependencies {
-    implementation project(':grpc-estore')
-
     implementation "com.exactpro.th2:common"
+    implementation "com.exactpro.th2:grpc-common"
+    implementation "com.exactpro.th2:grpc-estore"
     implementation "com.exactpro.th2:store-common"
     implementation "com.exactpro.cradle:cradle-cassandra"
     implementation "com.exactpro.cradle:cradle-core"

@@ -1,4 +1,1 @@
 rootProject.name = 'estore'
-
-include 'grpc-estore'
-project(':grpc-estore').name = 'grpc-estore'
