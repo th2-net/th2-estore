@@ -15,6 +15,8 @@ package com.exactpro.th2.eventstore.router;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import com.exactpro.th2.infra.grpc.EventBatch;
 import com.exactpro.th2.schema.message.MessageQueue;
@@ -34,6 +36,6 @@ public class EventBatchRouter extends AbstractRabbitMessageRouter<EventBatch> {
 
     @Override
     protected Map<String, EventBatch> findByFilter(Map<String, QueueConfiguration> queues, EventBatch msg) {
-        return Collections.emptyMap();
+        return queues.entrySet().stream().collect(Collectors.toMap(Entry::getKey, v -> msg));
     }
 }

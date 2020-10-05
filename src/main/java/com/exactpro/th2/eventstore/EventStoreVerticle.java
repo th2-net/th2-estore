@@ -27,6 +27,7 @@ import com.exactpro.cradle.cassandra.CassandraCradleManager;
 import com.exactpro.cradle.cassandra.connection.CassandraConnection;
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings;
 import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.th2.eventstore.configuration.EventStoreConfiguration;
 import com.exactpro.th2.eventstore.factory.EventStoreFactory;
 import com.exactpro.th2.metrics.CommonMetrics;
 import com.exactpro.th2.schema.cradle.CradleConfiguration;
@@ -41,9 +42,12 @@ public class EventStoreVerticle extends AbstractVerticle {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
     private final CradleManager cradleManager;
     private final EventStoreFactory factory;
+    private final EventStoreConfiguration configuration;
     private final AtomicInteger readness = new AtomicInteger(0); //FIXME: Remove with GRPC part
 
     public EventStoreVerticle(EventStoreFactory factory) throws IOException {
+        this.configuration = factory.getCustomConfiguration(EventStoreConfiguration.class);
+
         CradleConfiguration cradleConfiguration = factory.getCradleConfiguration();
 
         CassandraConnectionSettings cassandraConnectionSettings = new CassandraConnectionSettings(
@@ -100,7 +104,7 @@ public class EventStoreVerticle extends AbstractVerticle {
         return vertx.<Void>rxExecuteBlocking(AsyncHelper
             .createHandler(() -> {
                 try {
-                    String cradleInstanceName = InetAddress.getLocalHost().getHostName();
+                    String cradleInstanceName = configuration.getCradleInstanceName();
                     cradleManager.init(cradleInstanceName);
                     logger.info("Cradle manager init successfully with {} instance name", cradleInstanceName);
                     if (readness.incrementAndGet() > 1) {
