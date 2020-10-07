@@ -12,11 +12,13 @@
  */
 package com.exactpro.th2.eventstore;
 
+import static java.util.Objects.requireNonNull;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.exactpro.th2.eventstore.factory.EventStoreFactory;
 import com.exactpro.th2.metrics.CommonMetrics;
+import com.exactpro.th2.schema.factory.CommonFactory;
 
 import io.vertx.core.Vertx;
 
@@ -27,11 +29,17 @@ public class EventStoreMain {
     public static void main(String[] args) {
         try {
             CommonMetrics.setLiveness(true);
-            EventStoreFactory factory = EventStoreFactory.createFromArguments(args);
+            CommonFactory factory = CommonFactory.createFromArguments(args);
+
+            int grpcPort = requireNonNull(
+                    requireNonNull(factory.getGrpcRouterConfiguration(), "Configuration for grpc router can not be null")
+                            .getServerConfiguration(), "Configuration for grpc server can not be null")
+                    .getPort();
+
             Vertx vertx = Vertx.vertx();
-            EventStoreVerticle eventStoreVerticle = new EventStoreVerticle(factory);
+            EventStoreVerticle eventStoreVerticle = new EventStoreVerticle(factory, grpcPort);
             vertx.deployVerticle(eventStoreVerticle);
-            LOGGER.info("event store started on {} port", factory.getGrpcPort());
+            LOGGER.info("event store started on {} port", grpcPort);
         } catch (Exception e) {
             CommonMetrics.setLiveness(false);
             CommonMetrics.setReadiness(false);

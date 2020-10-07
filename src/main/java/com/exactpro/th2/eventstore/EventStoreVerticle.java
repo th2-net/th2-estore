@@ -12,12 +12,12 @@
  */
 package com.exactpro.th2.eventstore;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.IOException;
-import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,9 +28,9 @@ import com.exactpro.cradle.cassandra.connection.CassandraConnection;
 import com.exactpro.cradle.cassandra.connection.CassandraConnectionSettings;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.eventstore.configuration.EventStoreConfiguration;
-import com.exactpro.th2.eventstore.factory.EventStoreFactory;
 import com.exactpro.th2.metrics.CommonMetrics;
 import com.exactpro.th2.schema.cradle.CradleConfiguration;
+import com.exactpro.th2.schema.factory.CommonFactory;
 import com.exactpro.th2.store.common.utils.AsyncHelper;
 
 import io.reactivex.Completable;
@@ -41,11 +41,12 @@ import io.vertx.reactivex.impl.AsyncResultCompletable;
 public class EventStoreVerticle extends AbstractVerticle {
     private final Logger logger = LoggerFactory.getLogger(getClass().getName() + '@' + hashCode());
     private final CradleManager cradleManager;
-    private final EventStoreFactory factory;
+    private final CommonFactory factory;
     private final EventStoreConfiguration configuration;
     private final AtomicInteger readness = new AtomicInteger(0); //FIXME: Remove with GRPC part
+    private final int grpcPort;
 
-    public EventStoreVerticle(EventStoreFactory factory) throws IOException {
+    public EventStoreVerticle(CommonFactory factory, int grpcPort) throws IOException {
         this.configuration = factory.getCustomConfiguration(EventStoreConfiguration.class);
 
         CradleConfiguration cradleConfiguration = factory.getCradleConfiguration();
@@ -63,6 +64,8 @@ public class EventStoreVerticle extends AbstractVerticle {
         if (StringUtils.isNotEmpty(cradleConfiguration.getPassword())) {
             cassandraConnectionSettings.setPassword(cradleConfiguration.getPassword());
         }
+
+        this.grpcPort = grpcPort;
 
         this.cradleManager = new CassandraCradleManager(new CassandraConnection(cassandraConnectionSettings));
         this.factory = factory;
@@ -93,8 +96,7 @@ public class EventStoreVerticle extends AbstractVerticle {
 
     private Completable startGrpcService() {
         return AsyncResultCompletable.toCompletable(h ->
-            VertxServerBuilder.forPort(vertx.getDelegate(),
-                factory.getGrpcPort())
+            VertxServerBuilder.forPort(vertx.getDelegate(), grpcPort)
                 .addService(new ReportEventStoreService(cradleManager, vertx))
                 .build().start(h)
         );
