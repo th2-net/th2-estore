@@ -13,6 +13,10 @@
 
 package com.exactpro.th2.eventstore;
 
+import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleBatch;
+import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEventID;
+import static com.google.protobuf.TextFormat.shortDebugString;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -37,7 +41,7 @@ import com.exactpro.th2.store.common.utils.ProtoUtil;
 
 public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch> {
 
-    private final Logger logger = LoggerFactory.getLogger(this.getClass() + "@" + this.hashCode());
+    private static final Logger logger = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
 
     public ReportRabbitMQEventStoreService(MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
         super(router, cradleManager);
@@ -49,71 +53,70 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
     }
 
     @Override
-    public void handle(EventBatch delivery) {
+    public void handle(EventBatch eventBatch) {
         try {
-            String parentId = null;
-            boolean equals = true;
-            for (Event event : delivery.getEventsList()) {
-
-
-                if (!event.hasParentId()) {
-                    equals = false;
-                    break;
+            List<Event> events = eventBatch.getEventsList();
+            if (events.isEmpty()) {
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Sipped empty event batch " + shortDebugString(eventBatch));
                 }
-
-                if (parentId == null) {
-                    parentId = event.getParentId().getId();
-                } else if (!parentId.equals(event.getParentId().getId())){
-                    equals = false;
-                    break;
+            } else if (events.size() == 1) {
+                if (eventBatch.hasParentEventId()) {
+                    storeEventBatch(getCradleManager(), eventBatch);
+                } else {
+                    storeEvent(getCradleManager(), events.get(0));
                 }
-            }
-
-            if (equals) {
-                storeMessageBatch(delivery);
-            } else {
-                storeSingleMessages(delivery);
+            } else { // events.size() > 1
+                if (eventBatch.hasParentEventId()) {
+                    storeEventBatch(getCradleManager(), eventBatch);
+                } else {
+                    if (logger.isErrorEnabled()) {
+                        logger.error("Batch should have parent id " + shortDebugString(eventBatch));
+                    }
+                }
             }
         } catch (CradleStorageException | IOException e) {
-            logger.error("Event batch storing '{}' failed", delivery, e);
+            if (logger.isErrorEnabled()) {
+                logger.error("Event batch storing '{}' failed", shortDebugString(eventBatch), e);
+            }
             throw new RuntimeException("Event batch storing failed", e);
         }
 
     }
 
-    private void storeSingleMessages(EventBatch delivery) throws IOException, CradleStorageException {
-        for (Event event : delivery.getEventsList()) {
-            StoredTestEventSingle cradleEventSingle = StoredTestEvent.newStoredTestEventSingle(ProtoUtil.toCradleEvent(event));
+    public static StoredTestEventId storeEvent(CradleManager cradleManager, Event protoEvent) throws IOException, CradleStorageException {
+        StoredTestEventSingle cradleEventSingle = StoredTestEvent.newStoredTestEventSingle(ProtoUtil.toCradleEvent(protoEvent));
 
-            getCradleManager().getStorage().storeTestEvent(cradleEventSingle);
-            logger.debug("Stored single event id '{}' parent id '{}'",
-                    cradleEventSingle.getId(), cradleEventSingle.getParentId());
+        cradleManager.getStorage().storeTestEvent(cradleEventSingle);
+        logger.debug("Stored single event id '{}' parent id '{}'",
+                cradleEventSingle.getId(), cradleEventSingle.getParentId());
 
-            storeAttachedMessages(null, event);
-        }
+        storeAttachedMessages(cradleManager, null, protoEvent);
+
+        return cradleEventSingle.getId();
     }
 
-    private void storeMessageBatch(EventBatch delivery) throws CradleStorageException, IOException {
-        StoredTestEventBatch cradleBatch = ProtoUtil.toCradleBatch(delivery);
-        getCradleManager().getStorage().storeTestEvent(cradleBatch);
+    public static StoredTestEventId storeEventBatch(CradleManager cradleManager, EventBatch protoBatch) throws IOException, CradleStorageException {
+        StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
+        cradleManager.getStorage().storeTestEvent(cradleBatch);
         logger.debug("Stored batch id '{}' parent id '{}' size '{}'",
                 cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount());
 
-        for (Event event : delivery.getEventsList()) {
-            storeAttachedMessages(cradleBatch.getId(), event);
+        for (Event protoEvent : protoBatch.getEventsList()) {
+            storeAttachedMessages(cradleManager, cradleBatch.getId(), protoEvent);
         }
-
+        return cradleBatch.getId();
     }
 
-    private void storeAttachedMessages(StoredTestEventId batchID, Event protoEvent) throws IOException {
+    private static void storeAttachedMessages(CradleManager cradleManager, StoredTestEventId batchID, Event protoEvent) throws IOException {
         List<MessageID> attachedMessageIds = protoEvent.getAttachedMessageIdsList();
         if (!attachedMessageIds.isEmpty()) {
             List<StoredMessageId> messagesIds = attachedMessageIds.stream()
                     .map(ProtoUtil::toStoredMessageId)
                     .collect(Collectors.toList());
 
-            getCradleManager().getStorage().storeTestEventMessagesLink(
-                    ProtoUtil.toCradleEventID(protoEvent.getId()),
+            cradleManager.getStorage().storeTestEventMessagesLink(
+                    toCradleEventID(protoEvent.getId()),
                     batchID,
                     messagesIds);
             logger.debug("Stored attached messages '{}' to event id '{}'", messagesIds, protoEvent.getId().getId());

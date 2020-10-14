@@ -83,15 +83,8 @@ public class ReportEventStoreService extends EventStoreServiceVertxImplBase {
                 AsyncHelper.createHandler(() -> {
 
                     try {
-                        StoredTestEventSingle cradleEventSingle = StoredTestEvent.newStoredTestEventSingle(ProtoUtil.toCradleEvent(protoEvent));
-
-                        cradleManager.getStorage().storeTestEvent(cradleEventSingle);
-                        logger.debug("Stored single event id '{}' parent id '{}'",
-                            cradleEventSingle.getId(), cradleEventSingle.getParentId());
-
-                        storeAttachedMessages(null, protoEvent);
-
-                        return String.valueOf(cradleEventSingle.getId());
+                        StoredTestEventId storedTestEventId = ReportRabbitMQEventStoreService.storeEvent(cradleManager, protoEvent);
+                        return String.valueOf(storedTestEventId);
                     } catch (RuntimeException e) {
                         logger.error("Evet storing '{}' failed", protoEvent, e);
                         throw e;
@@ -106,15 +99,8 @@ public class ReportEventStoreService extends EventStoreServiceVertxImplBase {
             .flatMap(protoBatch -> vertx.rxExecuteBlocking(
                 AsyncHelper.createHandler(() -> {
                     try {
-                        StoredTestEventBatch cradleBatch = ProtoUtil.toCradleBatch(protoBatch);
-                        cradleManager.getStorage().storeTestEvent(cradleBatch);
-                        logger.debug("Stored batch id '{}' parent id '{}' size '{}'",
-                            cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount());
-
-                        for (Event protoEvent : protoBatch.getEventsList()) {
-                            storeAttachedMessages(cradleBatch.getId(), protoEvent);
-                        }
-                        return String.valueOf(cradleBatch.getId());
+                        StoredTestEventId storedTestEventId = ReportRabbitMQEventStoreService.storeEventBatch(cradleManager, protoBatch);
+                        return String.valueOf(storedTestEventId);
                     } catch (RuntimeException e) {
                         logger.error("Evet batch storing '{}' failed", protoBatch, e);
                         throw e;
