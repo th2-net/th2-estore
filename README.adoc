@@ -7,19 +7,29 @@ This application was generated using http://start.vertx.io
 == Building
 
 To launch your tests:
-```
+[source, bash]
+----
 ./gradlew clean test
-```
+----
 
 To package your application:
-```
+[source, bash]
+----
 ./gradlew clean assemble
-```
+----
 
 To run your application:
-```
+[source, bash]
+----
 ./gradlew clean run
-```
+----
+
+== Configuration
+Using schema configuration.
+
+Need RabbitMQ, MessageRouter, Cradle, GRPC (EventStore) and custom configuration files.
+
+=== RabbitMQ
 
 Event store env variables:
 ```

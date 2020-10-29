@@ -9,25 +9,23 @@ pipeline {
                                     returnStdout: true,
                                     script: 'git rev-list --count VERSION-1.1..HEAD'
                                     ).trim()}""" //TODO: Calculate revision from a specific tag instead of a root commit
-        TH2_REGISTRY = credentials('TH2_REGISTRY_USER')
-        TH2_REGISTRY_URL = credentials('TH2_REGISTRY')
+        TH2_SCHEMA_REGISTRY = credentials('TH2_SCHEMA_REGISTRY_USER')
+        TH2_SCHEMA_REGISTRY_URL = credentials('TH2_SCHEMA_REGISTRY')
         GRADLE_SWITCHES = " --warning-mode all --stacktrace -Pversion_build=${BUILD_NUMBER} -Pversion_maintenance=${VERSION_MAINTENANCE}"
-        GCHAT_WEB_HOOK = credentials('th2-dev-environment-web-hook')
-        GCHAT_THREAD_NAME = credentials('th2-dev-environment-release-docker-images-thread')
     }
     stages {
         stage ('Artifactory configuration') {
             steps {
-                rtGradleDeployer (
-                    id: "GRADLE_DEPLOYER",
-                    serverId: "artifatory5",
-                    repo: "libs-snapshot-local",
+                rtGradleDeployer(
+                        id: "GRADLE_DEPLOYER",
+                        serverId: "artifatory5",
+                        repo: "th2-schema-snapshot-local",
                 )
 
-                rtGradleResolver (
-                    id: "GRADLE_RESOLVER",
-                    serverId: "artifatory5",
-                    repo: "libs-snapshot"
+                rtGradleResolver(
+                        id: "GRADLE_RESOLVER",
+                        serverId: "artifatory5",
+                        repo: "th2-schema-snapshot-local"
                 )
             }
         }
@@ -62,9 +60,9 @@ pipeline {
         stage('Publish') {
             steps {
                 sh """
-                    docker login -u ${TH2_REGISTRY_USR} -p ${TH2_REGISTRY_PSW} ${TH2_REGISTRY_URL}
+                    docker login -u ${TH2_SCHEMA_REGISTRY_USR} -p ${TH2_SCHEMA_REGISTRY_PSW} ${TH2_SCHEMA_REGISTRY_URL}
                     ./gradlew dockerPush ${GRADLE_SWITCHES} \
-                    -Ptarget_docker_repository=${TH2_REGISTRY_URL}
+                    -Ptarget_docker_repository=${TH2_SCHEMA_REGISTRY_URL}
                 """ // TODO: Exec from root repository
             }
         }
@@ -84,18 +82,6 @@ pipeline {
                                 changeLogs += "\n${entry.msg}"
                             }
                         }
-                    } catch(e) {
-                        println "Exception occurred: ${e}"
-                    }
-
-                    def fields = [
-                        "*Job:* <${BUILD_URL}|${JOB_NAME}>",
-                        "*Docker image version:* ${dockerImageVersion}",
-                        "*Changes:*${changeLogs}"
-                    ]
-                    writeJSON file: 'result.json', json: [text: fields.join('\n'), thread: [name: GCHAT_THREAD_NAME]]
-                    try {
-                        sh "curl -s -H 'Content-Type: application/json' -d @result.json '${GCHAT_WEB_HOOK}'"
                     } catch(e) {
                         println "Exception occurred: ${e}"
                     }
