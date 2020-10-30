@@ -14,6 +14,8 @@ package com.exactpro.th2.estore;
 
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,22 +31,10 @@ public class EventStoreMain {
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
-        Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
-            @Override
-            public void run() {
-                LOGGER.info("Shutdown start");
-                CommonMetrics.setReadiness(false);
-                resources.descendingIterator().forEachRemaining(resource -> {
-                    try {
-                        resource.close();
-                    } catch (Exception e) {
-                        LOGGER.error(e.getMessage(), e);
-                    }
-                });
-                CommonMetrics.setLiveness(false);
-                LOGGER.info("Shutdown end");
-            }
-        });
+        ReentrantLock lock = new ReentrantLock();
+        Condition condition = lock.newCondition();
+
+        configureShutdownHook(resources, lock, condition);
         try {
             CommonMetrics.setLiveness(true);
             CommonFactory factory = CommonFactory.createFromArguments(args);
@@ -56,9 +46,49 @@ public class EventStoreMain {
             store.start();
             CommonMetrics.setReadiness(true);
             LOGGER.info("event store started");
+            awaitShutdown(lock, condition);
+        } catch (InterruptedException e) {
+            LOGGER.info("The main thread interupted", e);
         } catch (Exception e) {
             LOGGER.error("Fatal error: {}", e.getMessage(), e);
             System.exit(1);
         }
+    }
+
+    private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {
+        try {
+            lock.lock();
+            LOGGER.info("Wait shutdown");
+            condition.await();
+            LOGGER.info("App shutdowned");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
+        Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
+            @Override
+            public void run() {
+                LOGGER.info("Shutdown start");
+                CommonMetrics.setReadiness(false);
+                try {
+                    lock.lock();
+                    condition.signalAll();
+                } finally {
+                    lock.unlock();
+                }
+
+                resources.descendingIterator().forEachRemaining(resource -> {
+                    try {
+                        resource.close();
+                    } catch (Exception e) {
+                        LOGGER.error(e.getMessage(), e);
+                    }
+                });
+                CommonMetrics.setLiveness(false);
+                LOGGER.info("Shutdown end");
+            }
+        });
     }
 }
