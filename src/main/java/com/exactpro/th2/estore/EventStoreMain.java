@@ -12,7 +12,10 @@
  */
 package com.exactpro.th2.estore;
 
+import static java.util.Objects.requireNonNull;
+
 import java.util.Deque;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -23,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.exactpro.th2.estore.configuration.EventStoreConfiguration;
 import com.exactpro.th2.store.common.utils.CradleUtil;
 
 public class EventStoreMain {
@@ -39,7 +43,9 @@ public class EventStoreMain {
             CommonMetrics.setLiveness(true);
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
-            CradleManager cradleManager = CradleUtil.createCradleManager(factory.getCradleConfiguration());
+            EventStoreConfiguration configuration = factory.getCustomConfiguration(EventStoreConfiguration.class);
+            CradleManager cradleManager = CradleUtil.createCradleManager(factory.getCradleConfiguration(),
+                    requireNonNull(configuration.getCradleInstanceName(), "Cradle instance name cannot be null"));
             resources.add(cradleManager::dispose);
             ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
             resources.add(store::dispose);

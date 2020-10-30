@@ -2,7 +2,7 @@ variables:
   APP_NAME: "th2-estore"
   MAJOR_VERSION: "2"
   MINOR_VERSION: "1"
-  MAINTENANCE_VERSION: "1"
+  MAINTENANCE_VERSION: "2"
   ARTIFACTORY_PUBLISH_ENABLED: 'true'
 
 include:

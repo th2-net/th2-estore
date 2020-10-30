@@ -11,7 +11,7 @@
  * limitations under the License.
  */
 
-package com.exactpro.th2.eventstore.configuration;
+package com.exactpro.th2.estore.configuration;
 
 public class EventStoreConfiguration {
 
