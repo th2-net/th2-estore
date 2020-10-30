@@ -27,9 +27,8 @@ public class EventStoreMain {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventStoreMain.class);
 
-    private static final Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
-
     public static void main(String[] args) {
+        Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
         Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
             @Override
             public void run() {
