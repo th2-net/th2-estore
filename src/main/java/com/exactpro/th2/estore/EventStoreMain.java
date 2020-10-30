@@ -12,39 +12,54 @@
  */
 package com.exactpro.th2.estore;
 
-import static java.util.Objects.requireNonNull;
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.exactpro.cradle.CradleManager;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
-
-import io.vertx.core.Vertx;
+import com.exactpro.th2.store.common.utils.CradleUtil;
 
 public class EventStoreMain {
 
-    private final static Logger LOGGER = LoggerFactory.getLogger(EventStoreMain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventStoreMain.class);
+
+    private static final Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
 
     public static void main(String[] args) {
+        Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
+            @Override
+            public void run() {
+                LOGGER.info("Shutdown start");
+                CommonMetrics.setReadiness(false);
+                resources.descendingIterator().forEachRemaining(resource -> {
+                    try {
+                        resource.close();
+                    } catch (Exception e) {
+                        LOGGER.error(e.getMessage(), e);
+                    }
+                });
+                CommonMetrics.setLiveness(false);
+                LOGGER.info("Shutdown end");
+            }
+        });
         try {
             CommonMetrics.setLiveness(true);
             CommonFactory factory = CommonFactory.createFromArguments(args);
-
-            int grpcPort = requireNonNull(
-                    requireNonNull(factory.getGrpcRouterConfiguration(), "Configuration for grpc router can not be null")
-                            .getServerConfiguration(), "Configuration for grpc server can not be null")
-                    .getPort();
-
-            Vertx vertx = Vertx.vertx();
-            EventStoreVerticle eventStoreVerticle = new EventStoreVerticle(factory, grpcPort);
-            vertx.deployVerticle(eventStoreVerticle);
-            LOGGER.info("event store started on {} port", grpcPort);
+            resources.add(factory);
+            CradleManager cradleManager = CradleUtil.createCradleManager(factory.getCradleConfiguration());
+            resources.add(cradleManager::dispose);
+            ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
+            resources.add(store::dispose);
+            store.start();
+            CommonMetrics.setReadiness(true);
+            LOGGER.info("event store started");
         } catch (Exception e) {
-            CommonMetrics.setLiveness(false);
-            CommonMetrics.setReadiness(false);
-            LOGGER.error("fatal error: {}", e.getMessage(), e);
-            System.exit(-1);
+            LOGGER.error("Fatal error: {}", e.getMessage(), e);
+            System.exit(1);
         }
     }
 }

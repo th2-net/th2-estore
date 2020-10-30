@@ -13,8 +13,6 @@ allprojects {
 
     ext {
         sharedDir = file("${project.rootDir}/shared")
-        vertxVersion = '3.8.5'
-        vertxGrpcVersion = '1.25.0'
         junitJupiterEngineVersion = '5.4.0'
     }
 
@@ -29,10 +27,6 @@ allprojects {
             url sharedDir
         }
         mavenCentral()
-        maven {
-            name 'Schema snapshot'
-            url 'http://artifactory5.exp.exactpro.com/artifactory/th2-schema-snapshot-local'
-        }
         maven {
             name 'Artifactory snapshot'
             url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
@@ -109,13 +103,11 @@ apply plugin: 'com.palantir.docker'
 dependencies {
     implementation "com.exactpro.th2:common"
     implementation "com.exactpro.th2:grpc-common"
-    implementation "com.exactpro.th2:grpc-estore"
     implementation "com.exactpro.th2:store-common"
     implementation "com.exactpro.cradle:cradle-cassandra"
     implementation "com.exactpro.cradle:cradle-core"
 
-    implementation "io.vertx:vertx-grpc:${vertxVersion}"
-    implementation "io.vertx:vertx-rx-java2:$vertxVersion"
+    implementation 'com.google.protobuf:protobuf-java-util'
 
     implementation "org.jetbrains:annotations:20.0.0"
 
