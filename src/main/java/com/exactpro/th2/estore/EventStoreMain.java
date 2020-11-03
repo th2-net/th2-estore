@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
-import com.exactpro.th2.store.common.utils.CradleUtil;
 
 public class EventStoreMain {
 
@@ -39,7 +38,7 @@ public class EventStoreMain {
             CommonMetrics.setLiveness(true);
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
-            CradleManager cradleManager = CradleUtil.createCradleManager(factory.getCradleConfiguration());
+            CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
             ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
             resources.add(store::dispose);
