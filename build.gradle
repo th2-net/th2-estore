@@ -2,14 +2,12 @@ plugins {
     id 'com.google.protobuf' version '0.8.8' apply false
     id 'com.palantir.docker' version '0.25.0' apply false
     id "de.undercouch.download" version "4.0.4" apply false
-    id "com.jfrog.artifactory" version '4.15.1'
 }
 
 allprojects {
     apply plugin: 'java'
     apply plugin: 'java-library'
     apply plugin: 'maven-publish'
-    apply plugin: 'com.jfrog.artifactory'
 
     ext {
         sharedDir = file("${project.rootDir}/shared")
@@ -28,12 +26,8 @@ allprojects {
         }
         mavenCentral()
         maven {
-            name 'Artifactory snapshot'
-            url 'http://artifactory5.exp.exactpro.com/artifactory/libs-snapshot'
-        }
-        maven {
-            name 'Artifactory release'
-            url 'http://artifactory5.exp.exactpro.com/artifactory/libs-release'
+            name 'Bintray'
+            url 'https://dl.bintray.com/exactpro/th2'
         }
 
         configurations.all {
@@ -43,7 +37,7 @@ allprojects {
     }
 
     dependencies {
-        api platform('com.exactpro.th2:bom:2.1.+')
+        api platform('com.exactpro.th2:bom:2.4.+')
     }
 
     jar {
@@ -75,26 +69,6 @@ allprojects {
         }
     }
 
-    artifactory {
-        publish {
-            contextUrl = "${artifactory_url}"
-            repository {
-                repoKey = "${artifactory_deploy_repo_key}" // The Artifactory repository key to publish to
-                username = "${artifactory_user}" // The publisher user name
-                password = "${artifactory_password}" // The publisher password
-            }
-            defaults {
-                // Reference to Gradle publications defined in the build script.
-                // This is how we tell the Artifactory Plugin which artifacts should be
-                // published to Artifactory.
-                publications('mavenJava')
-                publishArtifacts = true
-                publishBuildInfo = true
-                // Properties to be attached to the published artifacts.
-                publishPom = true
-            }
-        }
-    }
 }
 
 apply plugin: 'application'
@@ -104,8 +78,8 @@ dependencies {
     implementation "com.exactpro.th2:common"
     implementation "com.exactpro.th2:grpc-common"
     implementation "com.exactpro.th2:store-common"
-    implementation "com.exactpro.cradle:cradle-cassandra"
-    implementation "com.exactpro.cradle:cradle-core"
+    implementation "com.exactpro.th2:cradle-cassandra"
+    implementation "com.exactpro.th2:cradle-core"
 
     implementation 'com.google.protobuf:protobuf-java-util'
 
@@ -113,8 +87,6 @@ dependencies {
 
     testCompile group: 'junit', name: 'junit', version: '4.12'
 }
-
-artifactoryPublish.skip = true
 
 application {
     mainClassName 'com.exactpro.th2.estore.EventStoreMain'
@@ -131,8 +103,5 @@ dockerPrepare {
 }
 
 docker {
-    name docker_image_name
-    tag 'local-version', docker_image_name
-
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
 }
