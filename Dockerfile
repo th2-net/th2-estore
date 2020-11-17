@@ -1,7 +1,13 @@
 FROM gradle:6.6-jdk11 AS build
-ARG app_version=0.0.0
+ARG release_version=0.0.0
+ARG bintray_user
+ARG bintray_key
+ARG vcs_url
 COPY ./ .
-RUN gradle dockerPrepare -Prelease_version=${app_version}
+RUN gradle --no-daemon clean dockerPrepare \
+    -Pbintray_user=${bintray_user} \
+    -Pbintray_key=${bintray_key} \
+    -Pvcs_url=${vcs_url}
 
 FROM openjdk:12-alpine
 ENV CRADLE_INSTANCE_NAME=instance1 \
