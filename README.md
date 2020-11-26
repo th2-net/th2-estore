@@ -23,13 +23,13 @@ kind: Th2Estore
 metadata:
   name: estore
 spec:
-  image-name: nexus.exactpro.com:9000/th2-event-store
+  image-name: ghcr.io/th2-net/th2-estore
   image-version: <image version>
-  custom-config:
-    cradleInstanceName: <instance>
   extended-settings:
     service:
       enabled: false
+    envVariables:
+      JAVA_TOOL_OPTIONS: "-XX:+ExitOnOutOfMemoryError -Ddatastax-java-driver.advanced.connection.init-query-timeout=\"5000 milliseconds\""
     resources:
       limits:
         memory: 500Mi
@@ -37,4 +37,5 @@ spec:
       requests:
         memory: 100Mi
         cpu: 20m
+
 ```
