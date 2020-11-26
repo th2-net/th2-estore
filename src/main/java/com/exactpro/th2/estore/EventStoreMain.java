@@ -44,10 +44,10 @@ public class EventStoreMain {
             resources.add(store::dispose);
             store.start();
             CommonMetrics.setReadiness(true);
-            LOGGER.info("event store started");
+            LOGGER.info("Event storing started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {
-            LOGGER.info("The main thread interupted", e);
+            LOGGER.info("The main thread interrupted", e);
         } catch (Exception e) {
             LOGGER.error("Fatal error: {}", e.getMessage(), e);
             System.exit(1);
@@ -57,9 +57,9 @@ public class EventStoreMain {
     private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {
         try {
             lock.lock();
-            LOGGER.info("Wait shutdown");
+            LOGGER.info("Wait to shutdown");
             condition.await();
-            LOGGER.info("App shutdowned");
+            LOGGER.info("App has been shut down");
         } finally {
             lock.unlock();
         }
