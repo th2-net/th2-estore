@@ -77,9 +77,9 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
             }
         } catch (CradleStorageException | IOException e) {
             if (logger.isErrorEnabled()) {
-                logger.error("Event batch storing '{}' failed", shortDebugString(eventBatch), e);
+                logger.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             }
-            throw new RuntimeException("Event batch storing failed", e);
+            throw new RuntimeException("Failed to store event batch", e);
         }
 
     }
