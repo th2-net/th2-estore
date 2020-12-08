@@ -62,13 +62,13 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                 }
             } else if (events.size() == 1) {
                 if (eventBatch.hasParentEventId()) {
-                    storeEventBatch(getCradleManager(), eventBatch);
+                    storeEventBatch(eventBatch);
                 } else {
-                    storeEvent(getCradleManager(), events.get(0));
+                    storeEvent(events.get(0));
                 }
             } else { // events.size() > 1
                 if (eventBatch.hasParentEventId()) {
-                    storeEventBatch(getCradleManager(), eventBatch);
+                    storeEventBatch(eventBatch);
                 } else {
                     if (logger.isErrorEnabled()) {
                         logger.error("Batch should have parent id " + shortDebugString(eventBatch));
@@ -84,38 +84,38 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
 
     }
 
-    public static StoredTestEventId storeEvent(CradleManager cradleManager, Event protoEvent) throws IOException, CradleStorageException {
+    private StoredTestEventId storeEvent(Event protoEvent) throws IOException, CradleStorageException {
         StoredTestEventSingle cradleEventSingle = StoredTestEvent.newStoredTestEventSingle(ProtoUtil.toCradleEvent(protoEvent));
 
-        cradleManager.getStorage().storeTestEvent(cradleEventSingle);
+        cradleStorage.storeTestEvent(cradleEventSingle);
         logger.debug("Stored single event id '{}' parent id '{}'",
                 cradleEventSingle.getId(), cradleEventSingle.getParentId());
 
-        storeAttachedMessages(cradleManager, null, protoEvent);
+        storeAttachedMessages(null, protoEvent);
 
         return cradleEventSingle.getId();
     }
 
-    public static StoredTestEventId storeEventBatch(CradleManager cradleManager, EventBatch protoBatch) throws IOException, CradleStorageException {
+    private StoredTestEventId storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
-        cradleManager.getStorage().storeTestEvent(cradleBatch);
+        cradleStorage.storeTestEvent(cradleBatch);
         logger.debug("Stored batch id '{}' parent id '{}' size '{}'",
                 cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount());
 
         for (Event protoEvent : protoBatch.getEventsList()) {
-            storeAttachedMessages(cradleManager, cradleBatch.getId(), protoEvent);
+            storeAttachedMessages(cradleBatch.getId(), protoEvent);
         }
         return cradleBatch.getId();
     }
 
-    private static void storeAttachedMessages(CradleManager cradleManager, StoredTestEventId batchID, Event protoEvent) throws IOException {
+    private void storeAttachedMessages(StoredTestEventId batchID, Event protoEvent) throws IOException {
         List<MessageID> attachedMessageIds = protoEvent.getAttachedMessageIdsList();
         if (!attachedMessageIds.isEmpty()) {
             List<StoredMessageId> messagesIds = attachedMessageIds.stream()
                     .map(ProtoUtil::toStoredMessageId)
                     .collect(Collectors.toList());
 
-            cradleManager.getStorage().storeTestEventMessagesLink(
+            cradleStorage.storeTestEventMessagesLink(
                     toCradleEventID(protoEvent.getId()),
                     batchID,
                     messagesIds);
