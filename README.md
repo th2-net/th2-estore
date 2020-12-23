@@ -40,7 +40,7 @@ spec:
 
 # Common features
 
-This list of supported features which provided libraries.
-1. CradleMaxEventBatchSize - the option defines the maximum of the event batch size in bytes.
-Please see more details about the future via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
+This is a list of supported features provided by libraries.
+1. CradleMaxEventBatchSize - this option defines the maximum event batch size in bytes.
+Please see more details about this feature via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
 
