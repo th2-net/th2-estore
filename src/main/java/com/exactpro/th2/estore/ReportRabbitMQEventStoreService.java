@@ -59,7 +59,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
                 if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("Sipped empty event batch " + shortDebugString(eventBatch));
+                    LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
                 }
             } else if (events.size() == 1) {
                 if (eventBatch.hasParentEventId()) {
