@@ -12,7 +12,7 @@ allprojects {
     ext {
         sharedDir                   = file("${project.rootDir}/shared")
         junitJupiterEngineVersion   = '5.4.0'
-        cradleVersion               = '2.4.0'
+        cradleVersion               = '2.6.1'
     }
 
     group = 'com.exactpro.th2'
@@ -74,7 +74,7 @@ apply plugin: 'com.palantir.docker'
 dependencies {
     api platform('com.exactpro.th2:bom:2.9.1')
 
-    implementation "com.exactpro.th2:common:2.7.0"
+    implementation "com.exactpro.th2:common:2.8.0"
     implementation "com.exactpro.th2:grpc-common:2.3.2"
     implementation "com.exactpro.th2:store-common:2.7.0"
     implementation "com.exactpro.th2:cradle-cassandra:${cradleVersion}"
@@ -84,7 +84,12 @@ dependencies {
 
     implementation "org.jetbrains:annotations:20.0.0"
 
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.4.2'
+    testImplementation 'org.mockito:mockito-junit-jupiter:3.6.0'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 application {

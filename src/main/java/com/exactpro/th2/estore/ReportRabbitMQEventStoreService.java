@@ -13,7 +13,7 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleBatch;
+import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEvent;
 import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
 
@@ -27,13 +27,14 @@ import org.slf4j.LoggerFactory;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.messages.StoredMessageId;
-import com.exactpro.cradle.testevents.StoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
+import com.exactpro.cradle.testevents.TestEventBatchToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.store.common.AbstractStorage;
@@ -41,7 +42,7 @@ import com.exactpro.th2.store.common.utils.ProtoUtil;
 
 public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch> {
 
-    private static final Logger logger = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
 
     public ReportRabbitMQEventStoreService(MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
         super(router, cradleManager);
@@ -57,8 +58,8 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
         try {
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
-                if (logger.isWarnEnabled()) {
-                    logger.warn("Sipped empty event batch " + shortDebugString(eventBatch));
+                if (LOGGER.isWarnEnabled()) {
+                    LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
                 }
             } else if (events.size() == 1) {
                 if (eventBatch.hasParentEventId()) {
@@ -70,14 +71,14 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                 if (eventBatch.hasParentEventId()) {
                     storeEventBatch(eventBatch);
                 } else {
-                    if (logger.isErrorEnabled()) {
-                        logger.error("Batch should have parent id " + shortDebugString(eventBatch));
+                    for (Event event : events) {
+                        storeEvent(event);
                     }
                 }
             }
         } catch (CradleStorageException | IOException e) {
-            if (logger.isErrorEnabled()) {
-                logger.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             }
             throw new RuntimeException("Failed to store event batch", e);
         }
@@ -85,10 +86,10 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
     }
 
     private StoredTestEventId storeEvent(Event protoEvent) throws IOException, CradleStorageException {
-        StoredTestEventSingle cradleEventSingle = StoredTestEvent.newStoredTestEventSingle(ProtoUtil.toCradleEvent(protoEvent));
+        StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
 
         cradleStorage.storeTestEvent(cradleEventSingle);
-        logger.debug("Stored single event id '{}' parent id '{}'",
+        LOGGER.debug("Stored single event id '{}' parent id '{}'",
                 cradleEventSingle.getId(), cradleEventSingle.getParentId());
 
         storeAttachedMessages(null, protoEvent);
@@ -99,7 +100,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
     private StoredTestEventId storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
         cradleStorage.storeTestEvent(cradleBatch);
-        logger.debug("Stored batch id '{}' parent id '{}' size '{}'",
+        LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                 cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount());
 
         for (Event protoEvent : protoBatch.getEventsList()) {
@@ -119,7 +120,17 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                     toCradleEventID(protoEvent.getId()),
                     batchID,
                     messagesIds);
-            logger.debug("Stored attached messages '{}' to event id '{}'", messagesIds, protoEvent.getId().getId());
+            LOGGER.debug("Stored attached messages '{}' to event id '{}'", messagesIds, protoEvent.getId().getId());
         }
+    }
+
+    private StoredTestEventBatch toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
+        StoredTestEventBatch cradleEventsBatch = cradleStorage.getObjectsFactory().createTestEventBatch(TestEventBatchToStore.builder()
+                .parentId(toCradleEventID(protoEventBatch.getParentEventId()))
+                .build());
+        for (Event protoEvent : protoEventBatch.getEventsList()) {
+            cradleEventsBatch.addTestEvent(toCradleEvent(protoEvent));
+        }
+        return cradleEventsBatch;
     }
 }
