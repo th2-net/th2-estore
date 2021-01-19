@@ -9,7 +9,7 @@ RUN gradle --no-daemon clean dockerPrepare \
     -Pbintray_key=${bintray_key} \
     -Pvcs_url=${vcs_url}
 
-FROM openjdk:12-alpine
+FROM adoptopenjdk/openjdk11:alpine
 ENV CRADLE_INSTANCE_NAME=instance1 \
     CASSANDRA_DATA_CENTER=kos \
     CASSANDRA_HOST=cassandra \
