@@ -2,9 +2,9 @@ plugins {
     id 'com.palantir.docker' version '0.25.0'
 }
 
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
-apply plugin: 'application'
+apply plugin: JavaLibraryPlugin
+apply plugin: MavenPublishPlugin
+apply plugin: ApplicationPlugin
 
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
