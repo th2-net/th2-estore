@@ -152,6 +152,9 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
+                    if (ex != null && LOGGER.isErrorEnabled()) {
+                        LOGGER.error("Failed to store the event '{}'", shortDebugString(protoEvent), ex);
+                    }
                     if (futuresToComplete.remove(result) == null) {
                         if (LOGGER.isWarnEnabled()) {
                             LOGGER.warn("Future related to the event '{}' is already removed from map", shortDebugString(protoEvent));
@@ -173,6 +176,9 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
         futuresToComplete.put(result, protoBatch);
         return result
                 .whenCompleteAsync((unused, ex) -> {
+                    if (ex != null && LOGGER.isErrorEnabled()) {
+                        LOGGER.error("Failed to store the event batch '{}'", shortDebugString(protoBatch), ex);
+                    }
                     if (futuresToComplete.remove(result) == null) {
                         if (LOGGER.isWarnEnabled()) {
                             LOGGER.warn("Future related to the batch '{}' is already removed from map", shortDebugString(protoBatch));
