@@ -120,12 +120,10 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                 if (!future.isDone()) {
                     future.get(1, TimeUnit.SECONDS);
                 }
-                futuresToRemove.add(future);
             } catch (CancellationException | ExecutionException e) {
                 if (logger.isWarnEnabled()) {
                     logger.warn("{} - storing {} object is failure", getClass().getSimpleName(), shortDebugString(object), e);
                 }
-                futuresToRemove.add(future);
             } catch (TimeoutException | InterruptedException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), shortDebugString(object), e);
@@ -136,6 +134,8 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                 if (mayInterruptIfRunning) {
                     Thread.currentThread().interrupt();
                 }
+            } finally {
+                futuresToRemove.add(future);
             }
         });
     }
