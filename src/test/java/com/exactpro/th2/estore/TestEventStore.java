@@ -13,15 +13,15 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.cradle.cassandra.CassandraStorageSettings.DEFAULT_MAX_EVENT_BATCH_SIZE;
-import static com.exactpro.cradle.cassandra.CassandraStorageSettings.DEFAULT_MAX_MESSAGE_BATCH_SIZE;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isNotNull;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,7 @@ import org.mockito.ArgumentCaptor;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleObjectsFactory;
 import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.messages.StoredMessageBatch;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
@@ -78,9 +80,10 @@ public class TestEventStore {
 
     @BeforeEach
     void setUp() throws IOException {
-        cradleObjectsFactory = spy(new CradleObjectsFactory(DEFAULT_MAX_MESSAGE_BATCH_SIZE, DEFAULT_MAX_EVENT_BATCH_SIZE));
+        cradleObjectsFactory = spy(new CradleObjectsFactory(StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE, StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE));
         when(storageMock.getObjectsFactory()).thenReturn(cradleObjectsFactory);
-        doNothing().when(storageMock).storeTestEvent(any());
+        doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
+        doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
         eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock));
@@ -90,7 +93,7 @@ public class TestEventStore {
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws IOException {
         eventStore.handle(deliveryOf());
-        verify(storageMock, never()).storeTestEvent(any());
+        verify(storageMock, never()).storeTestEventAsync(any());
     }
 
     @Test
@@ -103,8 +106,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, times(1)).storeTestEvent(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLink(any(), any(), any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -121,8 +124,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, times(1)).storeTestEvent(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLink(any(), any(), any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
@@ -140,8 +143,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, times(2)).storeTestEvent(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLink(any(), any(), any());
+        verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
@@ -164,8 +167,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
-        verify(storageMock, times(1)).storeTestEvent(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLink(any(), any(), any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored event batch");
@@ -182,21 +185,56 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, times(1)).storeTestEvent(captureEvent.capture());
+        verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
         ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
-        verify(storageMock, times(1)).storeTestEventMessagesLink(captureEventId.capture(), isNull(), captureMessagesIds.capture());
+        verify(storageMock, times(1)).storeTestEventMessagesLinkAsync(captureEventId.capture(), isNull(), captureMessagesIds.capture());
 
         StoredTestEventWithContent capturedEvent = captureEvent.getValue();
         assertNotNull(capturedEvent, "Captured stored event");
         assertStoredEvent(capturedEvent, first);
 
-        StoredTestEventId capturedEventId = captureEventId.getValue();
+        assertAttachedMessages(first, captureEventId.getValue(), captureMessagesIds.getValue());
+    }
+
+    @Test
+    @DisplayName("Event batch with two events and messages")
+    public void testEventsBatchDeliveryWithMessages() throws IOException, CradleStorageException {
+        String parentId = "root-id";
+        Event first = createEvent(parentId,"sub-event-first", 2);
+        Event second = createEvent(parentId,"sub-event-second", 2);
+        eventStore.handle(deliveryOf(parentId, first, second));
+
+        verify(cradleObjectsFactory, never()).createTestEvent(any());
+        verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
+
+        ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
+        ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
+        verify(storageMock, times(2)).storeTestEventMessagesLinkAsync(captureEventId.capture(),
+                isNotNull(),
+                captureMessagesIds.capture());
+
+        StoredTestEventBatch value = capture.getValue();
+        assertNotNull(value, "Captured stored event batch");
+        assertStoredEventBatch(value, parentId, first, second);
+
+        assertEquals(2, captureEventId.getAllValues().size());
+        assertEquals(2, captureMessagesIds.getAllValues().size());
+
+        assertAttachedMessages(first, captureEventId.getAllValues().get(0), captureMessagesIds.getAllValues().get(0));
+        assertAttachedMessages(second, captureEventId.getAllValues().get(1), captureMessagesIds.getAllValues().get(1));
+    }
+
+    private void assertAttachedMessages(Event first, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
         assertNotNull(capturedEventId);
         assertEquals(first.getId().getId(), capturedEventId.toString());
 
-        List<StoredMessageId> capturedMessagesIds = new ArrayList<>(captureMessagesIds.getValue());
+        List<StoredMessageId> capturedMessagesIds = new ArrayList<>(messageIds);
         assertEquals(first.getAttachedMessageIdsCount(), capturedMessagesIds.size());
         for (int i = 0; i < first.getAttachedMessageIdsCount(); i++) {
             assertStoredMessageId(first.getAttachedMessageIds(i), capturedMessagesIds.get(i));
