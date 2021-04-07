@@ -26,6 +26,8 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -54,6 +56,7 @@ import com.google.protobuf.MessageOrBuilder;
 public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
     private static final String[] ATTRIBUTES = { QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString() };
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
 
     public ReportRabbitMQEventStoreService(MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
@@ -104,13 +107,44 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
     public void dispose() {
         super.dispose();
 
-        logger.debug("Waiting for futures completion");
-        Collection<CompletableFuture<?>> futuresToRemove = new HashSet<>();
-        while (!futuresToComplete.isEmpty() && !Thread.currentThread().isInterrupted()) {
-            logger.info("Wait for the completion of {} futures", futuresToComplete.size());
-            futuresToRemove.clear();
-            awaitFutures(futuresToComplete, futuresToRemove);
-            futuresToComplete.keySet().removeAll(futuresToRemove);
+        logger.info("Waiting for futures completion");
+        try {
+            Collection<CompletableFuture<?>> futuresToRemove = new HashSet<>();
+            while (!futuresToComplete.isEmpty() && !Thread.currentThread().isInterrupted()) {
+                logger.info("Wait for the completion of {} futures", futuresToComplete.size());
+                futuresToRemove.clear();
+                awaitFutures(futuresToComplete, futuresToRemove);
+                futuresToComplete.keySet().removeAll(futuresToRemove);
+            }
+            logger.info("All waiting futures are completed");
+        } catch (Exception ex) {
+            logger.error("Cannot await all futures are finished", ex);
+        }
+
+        logger.info("Shutting down the executor");
+        try {
+            shutdownExecutor();
+            logger.info("Executor shutdown");
+        } catch (Exception ex) {
+            logger.error("Cannot shutdown the executor", ex);
+            if (ex instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void shutdownExecutor() throws InterruptedException {
+        executor.shutdown();
+        int timeout = 5;
+        TimeUnit unit = TimeUnit.SECONDS;
+        if (!executor.awaitTermination(timeout, unit)) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Executor is not terminated during the timeout: {} mls. Force shutdown", unit.toMillis(timeout));
+            }
+            List<Runnable> runnables = executor.shutdownNow();
+            if (!runnables.isEmpty()) {
+                logger.warn("{} task(s) are not executed", runnables.size());
+            }
         }
     }
 
@@ -148,7 +182,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
                 )
-                .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent));
+                .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent), executor);
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -160,7 +194,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                             LOGGER.warn("Future related to the event '{}' is already removed from map", shortDebugString(protoEvent));
                         }
                     }
-                })
+                }, executor)
                 .thenApply(unused -> cradleEventSingle.getId());
     }
 
@@ -172,7 +206,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()))
                 .thenComposeAsync(unused -> CompletableFuture.allOf(
                         protoBatch.getEventsList().stream().map(it -> storeAttachedMessages(cradleBatch.getId(), it)).toArray(CompletableFuture[]::new)
-                ));
+                ), executor);
         futuresToComplete.put(result, protoBatch);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -184,7 +218,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                             LOGGER.warn("Future related to the batch '{}' is already removed from map", shortDebugString(protoBatch));
                         }
                     }
-                })
+                }, executor)
                 .thenApply(unused -> cradleBatch.getId());
     }
 
