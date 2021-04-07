@@ -148,7 +148,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
                 )
-                .thenCompose(unused -> storeAttachedMessages(null, protoEvent));
+                .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent));
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -170,7 +170,7 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()))
-                .thenCompose(unused -> CompletableFuture.allOf(
+                .thenComposeAsync(unused -> CompletableFuture.allOf(
                         protoBatch.getEventsList().stream().map(it -> storeAttachedMessages(cradleBatch.getId(), it)).toArray(CompletableFuture[]::new)
                 ));
         futuresToComplete.put(result, protoBatch);
