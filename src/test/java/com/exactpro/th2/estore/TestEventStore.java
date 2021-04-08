@@ -25,6 +25,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -107,7 +108,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
+        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -125,7 +126,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
+        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
@@ -144,7 +145,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
+        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
@@ -168,7 +169,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, never()).storeTestEventMessagesLinkAsync(any(), any(), any());
+        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored event batch");
@@ -189,7 +190,7 @@ public class TestEventStore {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
         ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
-        verify(storageMock, times(1)).storeTestEventMessagesLinkAsync(captureEventId.capture(), isNull(), captureMessagesIds.capture());
+        verify(storageMock, timeout(100L).times(1)).storeTestEventMessagesLinkAsync(captureEventId.capture(), isNull(), captureMessagesIds.capture());
 
         StoredTestEventWithContent capturedEvent = captureEvent.getValue();
         assertNotNull(capturedEvent, "Captured stored event");
@@ -215,7 +216,7 @@ public class TestEventStore {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
         ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
-        verify(storageMock, times(2)).storeTestEventMessagesLinkAsync(captureEventId.capture(),
+        verify(storageMock, timeout(100L).times(2)).storeTestEventMessagesLinkAsync(captureEventId.capture(),
                 isNotNull(),
                 captureMessagesIds.capture());
 
