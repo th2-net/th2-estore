@@ -1,4 +1,4 @@
-# Overview (2.4.0)
+# Overview (3.1.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -44,3 +44,8 @@ This is a list of supported features provided by libraries.
 1. CradleMaxEventBatchSize - this option defines the maximum event batch size in bytes.
 Please see more details about this feature via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
 
+# Changes
+
+## 3.1.0
+
++ Use async methods for storing events to the Cradle
