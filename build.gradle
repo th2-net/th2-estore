@@ -52,21 +52,6 @@ jar {
     }
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-        }
-    }
-
-    repositories {
-        maven {
-            name = 'localRepo'
-            url = sharedDir
-        }
-    }
-}
-
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
