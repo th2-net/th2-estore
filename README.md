@@ -46,6 +46,10 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Changes
 
+## 3.5.0
+
++ Removed not needed separate calls for store event attached messages
+
 ## 3.4.0
 
 ### Changed:
