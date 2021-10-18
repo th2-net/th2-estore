@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,14 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.isNotNull;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,7 +30,6 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
@@ -49,10 +44,8 @@ import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleObjectsFactory;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.messages.StoredMessageBatch;
-import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
-import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventWithContent;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.ConnectionID;
@@ -84,7 +77,6 @@ public class TestEventStore {
         cradleObjectsFactory = spy(new CradleObjectsFactory(StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE, StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE));
         when(storageMock.getObjectsFactory()).thenReturn(cradleObjectsFactory);
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
-        doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
         eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock));
@@ -108,7 +100,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -126,7 +117,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
@@ -145,7 +135,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
@@ -169,7 +158,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(storageMock, timeout(100L).times(0)).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored event batch");
@@ -187,16 +175,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
-        ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
-        verify(storageMock, timeout(100L).times(1)).storeTestEventMessagesLinkAsync(captureEventId.capture(), isNull(), captureMessagesIds.capture());
-
-        StoredTestEventWithContent capturedEvent = captureEvent.getValue();
-        assertNotNull(capturedEvent, "Captured stored event");
-        assertStoredEvent(capturedEvent, first);
-
-        assertAttachedMessages(first, captureEventId.getValue(), captureMessagesIds.getValue());
     }
 
     @Test
@@ -212,34 +190,6 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Collection<StoredMessageId>> captureMessagesIds = ArgumentCaptor.forClass(Collection.class);
-        ArgumentCaptor<StoredTestEventId> captureEventId = ArgumentCaptor.forClass(StoredTestEventId.class);
-        verify(storageMock, timeout(100L).times(2)).storeTestEventMessagesLinkAsync(captureEventId.capture(),
-                isNotNull(),
-                captureMessagesIds.capture());
-
-        StoredTestEventBatch value = capture.getValue();
-        assertNotNull(value, "Captured stored event batch");
-        assertStoredEventBatch(value, parentId, first, second);
-
-        assertEquals(2, captureEventId.getAllValues().size());
-        assertEquals(2, captureMessagesIds.getAllValues().size());
-
-        assertAttachedMessages(first, captureEventId.getAllValues().get(0), captureMessagesIds.getAllValues().get(0));
-        assertAttachedMessages(second, captureEventId.getAllValues().get(1), captureMessagesIds.getAllValues().get(1));
-    }
-
-    private void assertAttachedMessages(Event first, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
-        assertNotNull(capturedEventId);
-        assertEquals(first.getId().getId(), capturedEventId.toString());
-
-        List<StoredMessageId> capturedMessagesIds = new ArrayList<>(messageIds);
-        assertEquals(first.getAttachedMessageIdsCount(), capturedMessagesIds.size());
-        for (int i = 0; i < first.getAttachedMessageIdsCount(); i++) {
-            assertStoredMessageId(first.getAttachedMessageIds(i), capturedMessagesIds.get(i));
-        }
     }
 
     private static void assertStoredEventBatch(StoredTestEventBatch actualBatch, String expectedParentId, Event ... expectedEvents) {
@@ -264,12 +214,6 @@ public class TestEventStore {
         assertEquals(expected.getType(), actual.getType(), "Event type");
         assertArrayEquals(expected.getBody().toByteArray(), actual.getContent(), "Event context");
         assertEquals(ProtoUtil.isSuccess(expected.getStatus()), actual.isSuccess(), "Event status");
-    }
-
-    private static void assertStoredMessageId(MessageID expected, StoredMessageId actual) {
-        assertEquals(ProtoUtil.toCradleDirection(expected.getDirection()), actual.getDirection(), "Message id direction");
-        assertEquals(expected.getConnectionId().getSessionAlias(), actual.getStreamName(), "Message id session alias");
-        assertEquals(expected.getSequence(), actual.getIndex(), "Message id sequence");
     }
 
     private Event createEvent(String parentId, String name, int numberOfMessages) {
