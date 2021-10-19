@@ -30,9 +30,13 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,8 +48,10 @@ import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleObjectsFactory;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.messages.StoredMessageBatch;
+import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
+import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventWithContent;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.ConnectionID;
@@ -175,6 +181,12 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
+
+        StoredTestEventWithContent capturedEvent = captureEvent.getValue();
+        assertNotNull(capturedEvent, "Captured stored event");
+        assertStoredEvent(capturedEvent, first);
+
+        assertEventAndStoredEvent(first, capturedEvent.getId(), capturedEvent.getMessageIds());
     }
 
     @Test
@@ -190,6 +202,31 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+
+        StoredTestEventBatch storedTestEventBatch = capture.getValue();
+        assertNotNull(storedTestEventBatch, "Captured stored event batch");
+        assertStoredEventBatch(storedTestEventBatch, parentId, first, second);
+
+        List<BatchedStoredTestEvent> batchedStoredTestEvents = new ArrayList<>(storedTestEventBatch.getTestEvents());
+        StoredTestEventId firstStoredEventId = batchedStoredTestEvents.get(0).getId();
+        StoredTestEventId secondStoredEventId = batchedStoredTestEvents.get(1).getId();
+
+        Map<StoredTestEventId, Collection<StoredMessageId>> eventIdToMessageIds= storedTestEventBatch.getMessageIdsMap();
+        assertEventAndStoredEvent(first, firstStoredEventId, eventIdToMessageIds.get(firstStoredEventId));
+        assertEventAndStoredEvent(second, secondStoredEventId, eventIdToMessageIds.get(secondStoredEventId));
+    }
+
+    private void assertEventAndStoredEvent(Event event, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
+        assertNotNull(capturedEventId);
+        assertEquals(event.getId().getId(), capturedEventId.toString());
+        assertAttachedMessages(event, messageIds);
+    }
+
+    private static void assertAttachedMessages(Event event, Collection<StoredMessageId> messageIds) {
+        assertEquals(
+                event.getAttachedMessageIdsList().stream().map(ProtoUtil::toStoredMessageId).collect(Collectors.toSet()),
+                new HashSet<>(messageIds)
+        );
     }
 
     private static void assertStoredEventBatch(StoredTestEventBatch actualBatch, String expectedParentId, Event ... expectedEvents) {
@@ -214,6 +251,7 @@ public class TestEventStore {
         assertEquals(expected.getType(), actual.getType(), "Event type");
         assertArrayEquals(expected.getBody().toByteArray(), actual.getContent(), "Event context");
         assertEquals(ProtoUtil.isSuccess(expected.getStatus()), actual.isSuccess(), "Event status");
+        assertAttachedMessages(expected, actual.getMessageIds());
     }
 
     private Event createEvent(String parentId, String name, int numberOfMessages) {
