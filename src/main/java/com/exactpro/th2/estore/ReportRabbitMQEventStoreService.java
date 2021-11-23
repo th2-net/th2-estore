@@ -74,14 +74,14 @@ public class ReportRabbitMQEventStoreService {
                 try {
                     handle(delivery);
                 } catch (Exception e) {
-                    LOGGER.warn("Can not handle delivery from consumer = {}", tag, e);
+                    LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
                 }
             }, ATTRIBUTES);
             if (monitor != null) {
                 LOGGER.info("RabbitMQ subscribing was successful");
             } else {
-                LOGGER.error("Can not find queues for subscribe");
-                throw new RuntimeException("Can not find queues for subscriber");
+                LOGGER.error("Cannot find queues for subscribe");
+                throw new RuntimeException("Cannot find queues for subscribe");
             }
         }
     }
@@ -125,7 +125,7 @@ public class ReportRabbitMQEventStoreService {
             try {
                 monitor.unsubscribe();
             } catch (Exception e) {
-                LOGGER.error("Can not unsubscribe from queues", e);
+                LOGGER.error("Cannot unsubscribe from queues", e);
             }
         }
 
