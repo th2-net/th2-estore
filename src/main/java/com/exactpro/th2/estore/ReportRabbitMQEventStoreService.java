@@ -21,6 +21,7 @@ import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -197,7 +198,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
-        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent, "", "", protoEvent.getStartTimestamp());
+        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent, protoEvent.getStartTimestamp());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
@@ -219,7 +220,10 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
-        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, "", "", protoBatch.getEvents(0).getStartTimestamp());
+        Comparator<Event> comparator = Comparator.comparing(event -> event.getStartTimestamp().getSeconds());
+        comparator.thenComparing(event -> event.getStartTimestamp().getNanos());
+        Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(comparator).get();
+        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId().getScope(), eventWithMinTimestamp.getStartTimestamp());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
@@ -241,16 +245,15 @@ public class ReportRabbitMQEventStoreService {
     private TestEventBatchToStore toCradleBatch(
             EventBatchOrBuilder protoEventBatch,
             String scope,
-            String parentScope,
             Timestamp startTimestamp
     ) throws CradleStorageException {
         TestEventBatchToStore cradleBatch = cradleStorage.getEntitiesFactory()
                 .testEventBatchBuilder()
                 .id(new BookId(protoEventBatch.getParentEventId().getBookName()), scope, toInstant(startTimestamp), UUID.randomUUID().toString())
-                .parentId(toCradleEventID(protoEventBatch.getParentEventId(), scope, startTimestamp))
+                .parentId(toCradleEventID(protoEventBatch.getParentEventId(), startTimestamp))
                 .build();
         for (Event protoEvent : protoEventBatch.getEventsList()) {
-            cradleBatch.addTestEvent(toCradleEvent(protoEvent, scope, parentScope, startTimestamp));
+            cradleBatch.addTestEvent(toCradleEvent(protoEvent, startTimestamp));
         }
         return cradleBatch;
     }

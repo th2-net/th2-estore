@@ -29,7 +29,6 @@ import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
-import com.google.protobuf.Timestamp;
 import com.google.protobuf.TimestampOrBuilder;
 
 import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
@@ -46,15 +45,10 @@ public class ProtoUtil {
         );
     }
 
-    public static TestEventSingleToStore toCradleEvent(
-            EventOrBuilder protoEvent,
-            String scope,
-            String parentScope,
-            Timestamp parentTimestamp
-    ) throws CradleStorageException {
+    public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent, TimestampOrBuilder parentTimestamp) throws CradleStorageException {
         TestEventSingleToStoreBuilder cradleEventBuilder = TestEventToStore
                 .singleBuilder()
-                .id(toCradleEventID(protoEvent.getId(), scope, protoEvent.getStartTimestamp()))
+                .id(toCradleEventID(protoEvent.getId(), protoEvent.getStartTimestamp()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
@@ -63,7 +57,7 @@ public class ProtoUtil {
                         .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {
-            cradleEventBuilder.parentId(toCradleEventID(protoEvent.getParentId(), parentScope, parentTimestamp));
+            cradleEventBuilder.parentId(toCradleEventID(protoEvent.getParentId(), parentTimestamp));
         }
         if (protoEvent.hasEndTimestamp()) {
             cradleEventBuilder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
@@ -71,10 +65,10 @@ public class ProtoUtil {
         return cradleEventBuilder.build();
     }
 
-    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID, String scope, TimestampOrBuilder startTimestamp) {
+    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID, TimestampOrBuilder startTimestamp) {
         return new StoredTestEventId(
                 new BookId(protoEventID.getBookName()),
-                scope,
+                protoEventID.getScope(),
                 toInstant(startTimestamp),
                 String.valueOf(protoEventID.getId())
         );
