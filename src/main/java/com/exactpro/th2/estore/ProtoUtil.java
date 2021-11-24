@@ -46,7 +46,7 @@ public class ProtoUtil {
     }
 
     public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent, TimestampOrBuilder parentTimestamp) throws CradleStorageException {
-        TestEventSingleToStoreBuilder cradleEventBuilder = TestEventToStore
+        TestEventSingleToStoreBuilder builder = TestEventToStore
                 .singleBuilder()
                 .id(toCradleEventID(protoEvent.getId(), protoEvent.getStartTimestamp()))
                 .name(protoEvent.getName())
@@ -57,12 +57,12 @@ public class ProtoUtil {
                         .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {
-            cradleEventBuilder.parentId(toCradleEventID(protoEvent.getParentId(), parentTimestamp));
+            builder.parentId(toCradleEventID(protoEvent.getParentId(), parentTimestamp));
         }
         if (protoEvent.hasEndTimestamp()) {
-            cradleEventBuilder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
+            builder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
         }
-        return cradleEventBuilder.build();
+        return builder.build();
     }
 
     public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID, TimestampOrBuilder startTimestamp) {

@@ -243,14 +243,14 @@ public class ReportRabbitMQEventStoreService {
             String scope,
             Timestamp startTimestamp
     ) throws CradleStorageException {
-        TestEventBatchToStore cradleBatch = cradleStorage.getEntitiesFactory()
+        TestEventBatchToStore cradleEventsBatch = cradleStorage.getEntitiesFactory()
                 .testEventBatchBuilder()
                 .id(new BookId(protoEventBatch.getParentEventId().getBookName()), scope, toInstant(startTimestamp), UUID.randomUUID().toString())
                 .parentId(toCradleEventID(protoEventBatch.getParentEventId(), startTimestamp))
                 .build();
         for (Event protoEvent : protoEventBatch.getEventsList()) {
-            cradleBatch.addTestEvent(toCradleEvent(protoEvent, startTimestamp));
+            cradleEventsBatch.addTestEvent(toCradleEvent(protoEvent, startTimestamp));
         }
-        return cradleBatch;
+        return cradleEventsBatch;
     }
 }
