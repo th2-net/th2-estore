@@ -97,15 +97,11 @@ public class ReportRabbitMQEventStoreService {
                 return;
             }
 
-            if (events.size() == 1) {
-                if (eventBatch.hasParentEventId()) {
-                    storeEventBatch(eventBatch);
-                } else {
+            if (eventBatch.hasParentEventId()) {
+                storeEventBatch(eventBatch);
+            } else {
+                if (events.size() == 1) {
                     storeEvent(events.get(0));
-                }
-            } else { // events.size() > 1
-                if (eventBatch.hasParentEventId()) {
-                    storeEventBatch(eventBatch);
                 } else {
                     for (Event event : events) {
                         storeEvent(event);
