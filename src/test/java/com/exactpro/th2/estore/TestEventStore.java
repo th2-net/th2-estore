@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,12 +13,12 @@
 
 package com.exactpro.th2.estore;
 
+import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isNotNull;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doReturn;
@@ -63,7 +63,6 @@ import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.exactpro.th2.store.common.utils.ProtoUtil;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import com.google.protobuf.TimestampOrBuilder;
@@ -267,7 +266,7 @@ public class TestEventStore {
     }
 
     private static void assertStoredMessageId(MessageID expected, StoredMessageId actual) {
-        assertEquals(ProtoUtil.toCradleDirection(expected.getDirection()), actual.getDirection(), "Message id direction");
+        assertEquals(toCradleDirection(expected.getDirection()), actual.getDirection(), "Message id direction");
         assertEquals(expected.getConnectionId().getSessionAlias(), actual.getStreamName(), "Message id session alias");
         assertEquals(expected.getSequence(), actual.getIndex(), "Message id sequence");
     }

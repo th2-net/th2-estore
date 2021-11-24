@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2020 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,9 +13,10 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEvent;
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEventID;
+import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
+import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -37,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.exactpro.cradle.CradleManager;
+import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventId;
@@ -49,26 +51,41 @@ import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
-import com.exactpro.th2.store.common.AbstractStorage;
-import com.exactpro.th2.store.common.utils.ProtoUtil;
+import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.MessageOrBuilder;
 
-public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch> {
+public class ReportRabbitMQEventStoreService {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
-    private static final String[] ATTRIBUTES = { QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString() };
+    private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
+    private final MessageRouter<EventBatch> router;
+    private final CradleStorage cradleStorage;
+    private SubscriberMonitor monitor;
 
-    public ReportRabbitMQEventStoreService(MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
-        super(router, cradleManager);
+    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
+        this.router = requireNonNull(router, "Message router can't be null");
+        cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
     }
 
-    @Override
-    protected String[] getAttributes() {
-        return ATTRIBUTES;
+    public void start() {
+        if (monitor == null) {
+            monitor = router.subscribeAll((tag, delivery) -> {
+                try {
+                    handle(delivery);
+                } catch (Exception e) {
+                    LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
+                }
+            }, ATTRIBUTES);
+            if (monitor != null) {
+                LOGGER.info("RabbitMQ subscribing was successful");
+            } else {
+                LOGGER.error("Cannot find queues for subscribe");
+                throw new RuntimeException("Cannot find queues for subscribe");
+            }
+        }
     }
 
-    @Override
     public void handle(EventBatch eventBatch) {
         try {
             List<Event> events = eventBatch.getEventsList();
@@ -103,30 +120,35 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
 
     }
 
-    @Override
     public void dispose() {
-        super.dispose();
+        if (monitor != null) {
+            try {
+                monitor.unsubscribe();
+            } catch (Exception e) {
+                LOGGER.error("Cannot unsubscribe from queues", e);
+            }
+        }
 
-        logger.info("Waiting for futures completion");
+        LOGGER.info("Waiting for futures completion");
         try {
             Collection<CompletableFuture<?>> futuresToRemove = new HashSet<>();
             while (!futuresToComplete.isEmpty() && !Thread.currentThread().isInterrupted()) {
-                logger.info("Wait for the completion of {} futures", futuresToComplete.size());
+                LOGGER.info("Wait for the completion of {} futures", futuresToComplete.size());
                 futuresToRemove.clear();
                 awaitFutures(futuresToComplete, futuresToRemove);
                 futuresToComplete.keySet().removeAll(futuresToRemove);
             }
-            logger.info("All waiting futures are completed");
+            LOGGER.info("All waiting futures are completed");
         } catch (Exception ex) {
-            logger.error("Cannot await all futures are finished", ex);
+            LOGGER.error("Cannot await all futures are finished", ex);
         }
 
-        logger.info("Shutting down the executor");
+        LOGGER.info("Shutting down the executor");
         try {
             shutdownExecutor();
-            logger.info("Executor shutdown");
+            LOGGER.info("Executor shutdown");
         } catch (Exception ex) {
-            logger.error("Cannot shutdown the executor", ex);
+            LOGGER.error("Cannot shutdown the executor", ex);
             if (ex instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -138,12 +160,12 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
         int timeout = 5;
         TimeUnit unit = TimeUnit.SECONDS;
         if (!executor.awaitTermination(timeout, unit)) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("Executor is not terminated during the timeout: {} mls. Force shutdown", unit.toMillis(timeout));
+            if (LOGGER.isWarnEnabled()) {
+                LOGGER.warn("Executor is not terminated during the timeout: {} mls. Force shutdown", unit.toMillis(timeout));
             }
             List<Runnable> runnables = executor.shutdownNow();
             if (!runnables.isEmpty()) {
-                logger.warn("{} task(s) are not executed", runnables.size());
+                LOGGER.warn("{} task(s) are not executed", runnables.size());
             }
         }
     }
@@ -155,12 +177,12 @@ public class ReportRabbitMQEventStoreService extends AbstractStorage<EventBatch>
                     future.get(1, TimeUnit.SECONDS);
                 }
             } catch (CancellationException | ExecutionException e) {
-                if (logger.isWarnEnabled()) {
-                    logger.warn("{} - storing {} object is failure", getClass().getSimpleName(), shortDebugString(object), e);
+                if (LOGGER.isWarnEnabled()) {
+                    LOGGER.warn("{} - storing {} object is failure", getClass().getSimpleName(), shortDebugString(object), e);
                 }
             } catch (TimeoutException | InterruptedException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), shortDebugString(object), e);
+                if (LOGGER.isErrorEnabled()) {
+                    LOGGER.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), shortDebugString(object), e);
                 }
                 boolean mayInterruptIfRunning = e instanceof InterruptedException;
                 future.cancel(mayInterruptIfRunning);
