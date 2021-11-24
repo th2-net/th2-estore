@@ -13,9 +13,9 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEvent;
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toCradleEventID;
-import static com.exactpro.th2.store.common.utils.ProtoUtil.toInstant;
+import static com.exactpro.th2.common.util.StorageUtils.toInstant;
+import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
+import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleManager;
+import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.TestEventBatchToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
@@ -49,7 +50,7 @@ import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
-import com.exactpro.th2.store.common.AbstractStorage;
+import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.Timestamp;
 
