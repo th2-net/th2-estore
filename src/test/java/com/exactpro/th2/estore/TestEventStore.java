@@ -14,6 +14,7 @@
 package com.exactpro.th2.estore;
 
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
+import static com.exactpro.th2.estore.ProtoUtil.EVENT_MIN_START_TIMESTAMP_COMPARATOR;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,6 +32,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -262,7 +264,11 @@ public class TestEventStore {
         assertEquals(expectedEvents.length, actualBatch.getTestEvents().size(), "Event batch size");
         List<BatchedStoredTestEvent> actualEvents = new ArrayList<>(actualBatch.getTestEvents());
         for (int i = 0; i < expectedEvents.length; i++) {
-            assertStoredEvent(actualEvents.get(i), expectedEvents[i], expectedEvents[0].getStartTimestamp());
+            assertStoredEvent(
+                    actualEvents.get(i),
+                    expectedEvents[i],
+                    Arrays.stream(expectedEvents).min(EVENT_MIN_START_TIMESTAMP_COMPARATOR).get().getStartTimestamp()
+            );
         }
     }
 

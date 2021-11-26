@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.estore;
 
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import com.exactpro.cradle.BookId;
@@ -25,6 +26,7 @@ import com.exactpro.cradle.testevents.TestEventSingleToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
@@ -35,6 +37,10 @@ import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
+    public static Comparator<Event> EVENT_MIN_START_TIMESTAMP_COMPARATOR = Comparator
+            .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
+            .thenComparingInt(event -> event.getStartTimestamp().getNanos());
+
     public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId, TimestampOrBuilder timestamp) {
         return new StoredMessageId(
                 new BookId(messageId.getBookName()),

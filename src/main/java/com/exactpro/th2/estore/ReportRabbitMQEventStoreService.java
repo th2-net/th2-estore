@@ -14,6 +14,7 @@
 package com.exactpro.th2.estore;
 
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
+import static com.exactpro.th2.estore.ProtoUtil.EVENT_MIN_START_TIMESTAMP_COMPARATOR;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
@@ -21,7 +22,6 @@ import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -216,10 +216,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
-        Comparator<Event> comparator = Comparator
-                .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
-                .thenComparingInt(event -> event.getStartTimestamp().getNanos());
-        Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(comparator).get();
+        Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(EVENT_MIN_START_TIMESTAMP_COMPARATOR).get();
         TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId().getScope(), eventWithMinTimestamp.getStartTimestamp());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
