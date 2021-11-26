@@ -176,8 +176,8 @@ public class TestEventStore {
     }
 
     @Test
-    @DisplayName("Event batch with two unordered events without messages")
-    public void testEventsBatchDeliveryUnordered() throws IOException, CradleStorageException {
+    @DisplayName("Event batch with two events in descending start time order without messages")
+    public void testEventsBatchDeliveryDescendingStartTime() throws IOException, CradleStorageException {
         String bookName = bookName(random.nextInt());
         String scope = scope(random.nextInt());
         String parentId = "root-id";
