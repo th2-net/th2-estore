@@ -216,8 +216,9 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
-        Comparator<Event> comparator = Comparator.comparing(event -> event.getStartTimestamp().getSeconds());
-        comparator.thenComparing(event -> event.getStartTimestamp().getNanos());
+        Comparator<Event> comparator = Comparator
+                .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
+                .thenComparingInt(event -> event.getStartTimestamp().getNanos());
         Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(comparator).get();
         TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId().getScope(), eventWithMinTimestamp.getStartTimestamp());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
