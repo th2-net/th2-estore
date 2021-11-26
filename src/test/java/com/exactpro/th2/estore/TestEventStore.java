@@ -49,8 +49,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import com.exactpro.cradle.BookId;
-import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleEntitiesFactory;
+import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
@@ -165,24 +165,85 @@ public class TestEventStore {
         String parentId = "root-id";
         Event first = createEvent(bookName, scope, parentId, "sub-event-first");
         Event second = createEvent(bookName, scope, parentId, "sub-event-second");
-        eventStore.handle(deliveryOf(bookName, scope, parentId, first, second));
+        assertAndReturnTestEventBatchToStore(
+                bookName,
+                scope,
+                parentId,
+                first,
+                second,
+                first.getStartTimestamp()
+        );
+    }
 
-        verify(cradleEntitiesFactory, times(1)).testEventBatchBuilder();
+    @Test
+    @DisplayName("Event batch with two unordered events without messages")
+    public void testEventsBatchDeliveryUnordered() throws IOException, CradleStorageException {
+        String bookName = bookName(random.nextInt());
+        String scope = scope(random.nextInt());
+        String parentId = "root-id";
+        Event second = createEvent(bookName, scope, parentId, "sub-event-second");
+        Event first = createEvent(bookName, scope, parentId, "sub-event-first");
+        assertAndReturnTestEventBatchToStore(
+                bookName,
+                scope,
+                parentId,
+                first,
+                second,
+                second.getStartTimestamp()
+        );
+    }
+
+    @Test
+    @DisplayName("Event batch with two events and messages")
+    public void testEventsBatchDeliveryWithMessages() throws IOException, CradleStorageException {
+        String bookName = bookName(random.nextInt());
+        String scope = scope(random.nextInt());
+        String parentId = "root-id";
+        Event first = createEvent(bookName, scope, parentId, "sub-event-first", 2);
+        Event second = createEvent(bookName, scope, parentId, "sub-event-second", 2);
+        TestEventBatchToStore testEventBatchToStore = assertAndReturnTestEventBatchToStore(
+                bookName,
+                scope,
+                parentId,
+                first,
+                second,
+                first.getStartTimestamp()
+        );
+
+        List<BatchedStoredTestEvent> batchedStoredTestEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
+        StoredTestEventId firstStoredEventId = batchedStoredTestEvents.get(0).getId();
+        StoredTestEventId secondStoredEventId = batchedStoredTestEvents.get(1).getId();
+
+        Map<StoredTestEventId, Set<StoredMessageId>> eventIdToMessageIds = testEventBatchToStore.getBatchMessages();
+        assertEventAndStoredEvent(first, firstStoredEventId, eventIdToMessageIds.get(firstStoredEventId));
+        assertEventAndStoredEvent(second, secondStoredEventId, eventIdToMessageIds.get(secondStoredEventId));
+    }
+
+    private TestEventBatchToStore assertAndReturnTestEventBatchToStore(
+            String bookName,
+            String scope,
+            String parentId,
+            Event first,
+            Event second,
+            Timestamp expectedTimestamp
+    ) throws IOException, CradleStorageException {
+        eventStore.handle(deliveryOf(bookName, scope, parentId, first, second));
 
         ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
-        TestEventBatchToStore value = capture.getValue();
-        assertNotNull(value, "Captured stored event batch");
+        TestEventBatchToStore testEventBatchToStore = capture.getValue();
+        assertNotNull(testEventBatchToStore, "Captured stored event batch");
         assertStoredEventBatch(
                 bookName,
                 scope,
-                first.getStartTimestamp(),
+                expectedTimestamp,
                 parentId,
-                value,
+                testEventBatchToStore,
                 first,
                 second
         );
+        return testEventBatchToStore;
     }
 
     @Test
@@ -203,34 +264,6 @@ public class TestEventStore {
         assertStoredEvent(capturedEvent, first, first.getStartTimestamp());
 
         assertEventAndStoredEvent(first, capturedEvent.getId(), capturedEvent.getMessages());
-    }
-
-    @Test
-    @DisplayName("Event batch with two events and messages")
-    public void testEventsBatchDeliveryWithMessages() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        String parentId = "root-id";
-        Event first = createEvent(bookName, scope, parentId, "sub-event-first", 2);
-        Event second = createEvent(bookName, scope, parentId, "sub-event-second", 2);
-        eventStore.handle(deliveryOf(bookName, scope, parentId, first, second));
-
-        verify(cradleEntitiesFactory, times(1)).testEventBatchBuilder();
-
-        ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-
-        TestEventBatchToStore testEventBatchToStore = capture.getValue();
-        assertNotNull(testEventBatchToStore, "Captured stored event batch");
-        assertStoredEventBatch(bookName, scope, first.getStartTimestamp(), parentId, testEventBatchToStore, first, second);
-
-        List<BatchedStoredTestEvent> batchedStoredTestEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
-        StoredTestEventId firstStoredEventId = batchedStoredTestEvents.get(0).getId();
-        StoredTestEventId secondStoredEventId = batchedStoredTestEvents.get(1).getId();
-
-        Map<StoredTestEventId, Set<StoredMessageId>> eventIdToMessageIds = testEventBatchToStore.getBatchMessages();
-        assertEventAndStoredEvent(first, firstStoredEventId, eventIdToMessageIds.get(firstStoredEventId));
-        assertEventAndStoredEvent(second, secondStoredEventId, eventIdToMessageIds.get(secondStoredEventId));
     }
 
     private void assertEventAndStoredEvent(Event event, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
