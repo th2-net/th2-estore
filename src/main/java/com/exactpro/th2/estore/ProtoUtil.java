@@ -16,35 +16,54 @@
 
 package com.exactpro.th2.estore;
 
+import java.util.Comparator;
+import java.util.stream.Collectors;
+
+import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventId;
+import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventToStore;
-import com.exactpro.cradle.testevents.TestEventToStoreBuilder;
+import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
+import com.google.protobuf.TimestampOrBuilder;
 
 import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
-    public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId) {
-        return new StoredMessageId(messageId.getConnectionId().getSessionAlias(), toCradleDirection(messageId.getDirection()), messageId.getSequence());
+    public static Comparator<Event> EVENT_START_TIMESTAMP_COMPARATOR = Comparator
+            .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
+            .thenComparingInt(event -> event.getStartTimestamp().getNanos());
+
+    public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId, TimestampOrBuilder timestamp) {
+        return new StoredMessageId(
+                new BookId(messageId.getBookName()),
+                messageId.getConnectionId().getSessionAlias(),
+                toCradleDirection(messageId.getDirection()),
+                toInstant(timestamp),
+                messageId.getSequence()
+        );
     }
 
-    public static TestEventToStore toCradleEvent(EventOrBuilder protoEvent) {
-        TestEventToStoreBuilder builder = TestEventToStore.builder()
-                .id(toCradleEventID(protoEvent.getId()))
+    public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent, TimestampOrBuilder parentTimestamp) throws CradleStorageException {
+        TestEventSingleToStoreBuilder builder = TestEventToStore
+                .singleBuilder()
+                .id(toCradleEventID(protoEvent.getId(), protoEvent.getStartTimestamp()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
+                .messages(protoEvent.getAttachedMessageIdsList().stream()
+                        .map(messageId -> toStoredMessageId(messageId, protoEvent.getStartTimestamp()))
+                        .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {
-            builder.parentId(toCradleEventID(protoEvent.getParentId()));
-        }
-        if (protoEvent.hasStartTimestamp()) {
-            builder.startTimestamp(toInstant(protoEvent.getStartTimestamp()));
+            builder.parentId(toCradleEventID(protoEvent.getParentId(), parentTimestamp));
         }
         if (protoEvent.hasEndTimestamp()) {
             builder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
@@ -52,8 +71,13 @@ public class ProtoUtil {
         return builder.build();
     }
 
-    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID) {
-        return new StoredTestEventId(String.valueOf(protoEventID.getId()));
+    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID, TimestampOrBuilder startTimestamp) {
+        return new StoredTestEventId(
+                new BookId(protoEventID.getBookName()),
+                protoEventID.getScope(),
+                toInstant(startTimestamp),
+                String.valueOf(protoEventID.getId())
+        );
     }
 
     /**
