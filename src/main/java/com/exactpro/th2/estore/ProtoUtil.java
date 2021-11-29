@@ -37,7 +37,7 @@ import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
-    public static Comparator<Event> EVENT_MIN_START_TIMESTAMP_COMPARATOR = Comparator
+    public static Comparator<Event> EVENT_START_TIMESTAMP_COMPARATOR = Comparator
             .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
             .thenComparingInt(event -> event.getStartTimestamp().getNanos());
 

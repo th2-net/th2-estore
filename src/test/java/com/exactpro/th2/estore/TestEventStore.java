@@ -14,7 +14,7 @@
 package com.exactpro.th2.estore;
 
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static com.exactpro.th2.estore.ProtoUtil.EVENT_MIN_START_TIMESTAMP_COMPARATOR;
+import static com.exactpro.th2.estore.ProtoUtil.EVENT_START_TIMESTAMP_COMPARATOR;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -300,7 +300,7 @@ public class TestEventStore {
             assertStoredEvent(
                     actualEvents.get(i),
                     expectedEvents[i],
-                    Arrays.stream(expectedEvents).min(EVENT_MIN_START_TIMESTAMP_COMPARATOR).get().getStartTimestamp()
+                    Arrays.stream(expectedEvents).min(EVENT_START_TIMESTAMP_COMPARATOR).get().getStartTimestamp()
             );
         }
     }
