@@ -38,8 +38,8 @@ import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
     public static Comparator<Event> EVENT_START_TIMESTAMP_COMPARATOR = Comparator
-            .<Event>comparingLong(event -> event.getStartTimestamp().getSeconds())
-            .thenComparingInt(event -> event.getStartTimestamp().getNanos());
+            .<Event>comparingLong(event -> event.getId().getStartTimestamp().getSeconds())
+            .thenComparingInt(event -> event.getId().getStartTimestamp().getNanos());
 
     public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId, TimestampOrBuilder timestamp) {
         return new StoredMessageId(
@@ -54,12 +54,12 @@ public class ProtoUtil {
     public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent, TimestampOrBuilder parentTimestamp) throws CradleStorageException {
         TestEventSingleToStoreBuilder builder = TestEventToStore
                 .singleBuilder()
-                .id(toCradleEventID(protoEvent.getId(), protoEvent.getStartTimestamp()))
+                .id(toCradleEventID(protoEvent.getId(), protoEvent.getId().getStartTimestamp()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
                 .messages(protoEvent.getAttachedMessageIdsList().stream()
-                        .map(messageId -> toStoredMessageId(messageId, protoEvent.getStartTimestamp()))
+                        .map(messageId -> toStoredMessageId(messageId, protoEvent.getId().getStartTimestamp()))
                         .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {

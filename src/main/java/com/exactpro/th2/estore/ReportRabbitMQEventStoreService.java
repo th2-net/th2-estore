@@ -49,11 +49,11 @@ import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.MessageOrBuilder;
-import com.google.protobuf.Timestamp;
 
 public class ReportRabbitMQEventStoreService {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
@@ -194,7 +194,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
-        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent, protoEvent.getStartTimestamp());
+        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent, protoEvent.getId().getStartTimestamp());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
@@ -217,7 +217,7 @@ public class ReportRabbitMQEventStoreService {
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
         Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(EVENT_START_TIMESTAMP_COMPARATOR).get();
-        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId().getScope(), eventWithMinTimestamp.getStartTimestamp());
+        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
@@ -238,16 +238,20 @@ public class ReportRabbitMQEventStoreService {
 
     private TestEventBatchToStore toCradleBatch(
             EventBatchOrBuilder protoEventBatch,
-            String scope,
-            Timestamp startTimestamp
+            EventID eventIdWithMinTimestamp
     ) throws CradleStorageException {
         TestEventBatchToStore cradleEventsBatch = cradleStorage.getEntitiesFactory()
                 .testEventBatchBuilder()
-                .id(new BookId(protoEventBatch.getParentEventId().getBookName()), scope, toInstant(startTimestamp), UUID.randomUUID().toString())
-                .parentId(toCradleEventID(protoEventBatch.getParentEventId(), startTimestamp))
+                .id(
+                        new BookId(protoEventBatch.getParentEventId().getBookName()),
+                        eventIdWithMinTimestamp.getScope(),
+                        toInstant(eventIdWithMinTimestamp.getStartTimestamp()),
+                        UUID.randomUUID().toString()
+                )
+                .parentId(toCradleEventID(protoEventBatch.getParentEventId(), eventIdWithMinTimestamp.getStartTimestamp()))
                 .build();
         for (Event protoEvent : protoEventBatch.getEventsList()) {
-            cradleEventsBatch.addTestEvent(toCradleEvent(protoEvent, startTimestamp));
+            cradleEventsBatch.addTestEvent(toCradleEvent(protoEvent, eventIdWithMinTimestamp.getStartTimestamp()));
         }
         return cradleEventsBatch;
     }

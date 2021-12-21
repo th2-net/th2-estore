@@ -13,6 +13,8 @@
 
 package com.exactpro.th2.estore;
 
+import static com.exactpro.th2.common.event.EventUtils.toEventID;
+import static com.exactpro.th2.common.event.EventUtils.toTimestamp;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 import static com.exactpro.th2.estore.ProtoUtil.EVENT_START_TIMESTAMP_COMPARATOR;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -63,7 +65,6 @@ import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -113,7 +114,7 @@ public class TestEventStore {
 
         TestEventSingleToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
-        assertStoredEvent(value, first, first.getStartTimestamp());
+        assertStoredEvent(value, first, first.getId().getStartTimestamp());
     }
 
     @Test
@@ -131,7 +132,7 @@ public class TestEventStore {
 
         TestEventSingleToStore value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
-        assertStoredEvent(value, first, first.getStartTimestamp());
+        assertStoredEvent(value, first, first.getId().getStartTimestamp());
     }
 
     @Test
@@ -150,11 +151,11 @@ public class TestEventStore {
 
         TestEventSingleToStore value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
-        assertStoredEvent(value, first, first.getStartTimestamp());
+        assertStoredEvent(value, first, first.getId().getStartTimestamp());
 
         value = capture.getAllValues().get(1);
         assertNotNull(value, "Captured second stored event");
-        assertStoredEvent(value, second, second.getStartTimestamp());
+        assertStoredEvent(value, second, second.getId().getStartTimestamp());
     }
 
     @Test
@@ -171,7 +172,7 @@ public class TestEventStore {
                 parentId,
                 first,
                 second,
-                first.getStartTimestamp()
+                first.getId().getStartTimestamp()
         );
     }
 
@@ -189,7 +190,7 @@ public class TestEventStore {
                 parentId,
                 first,
                 second,
-                second.getStartTimestamp()
+                second.getId().getStartTimestamp()
         );
     }
 
@@ -207,7 +208,7 @@ public class TestEventStore {
                 parentId,
                 first,
                 second,
-                first.getStartTimestamp()
+                first.getId().getStartTimestamp()
         );
 
         List<BatchedStoredTestEvent> batchedStoredTestEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
@@ -261,7 +262,7 @@ public class TestEventStore {
 
         TestEventSingleToStore capturedEvent = captureEvent.getValue();
         assertNotNull(capturedEvent, "Captured stored event");
-        assertStoredEvent(capturedEvent, first, first.getStartTimestamp());
+        assertStoredEvent(capturedEvent, first, first.getId().getStartTimestamp());
 
         assertEventAndStoredEvent(first, capturedEvent.getId(), capturedEvent.getMessages());
     }
@@ -269,7 +270,7 @@ public class TestEventStore {
     private void assertEventAndStoredEvent(Event event, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
         assertNotNull(capturedEventId);
         assertEquals(
-                new StoredTestEventId(new BookId(event.getId().getBookName()), event.getId().getScope(), toInstant(event.getStartTimestamp()), event.getId().getId()),
+                new StoredTestEventId(new BookId(event.getId().getBookName()), event.getId().getScope(), toInstant(event.getId().getStartTimestamp()), event.getId().getId()),
                 capturedEventId
         );
         assertAttachedMessages(event, messageIds);
@@ -277,7 +278,7 @@ public class TestEventStore {
 
     private static void assertAttachedMessages(Event event, Collection<StoredMessageId> messageIds) {
         assertEquals(
-                event.getAttachedMessageIdsList().stream().map(messageId -> ProtoUtil.toStoredMessageId(messageId, event.getStartTimestamp())).collect(Collectors.toSet()),
+                event.getAttachedMessageIdsList().stream().map(messageId -> ProtoUtil.toStoredMessageId(messageId, event.getId().getStartTimestamp())).collect(Collectors.toSet()),
                 new HashSet<>(messageIds)
         );
     }
@@ -300,14 +301,14 @@ public class TestEventStore {
             assertStoredEvent(
                     actualEvents.get(i),
                     expectedEvents[i],
-                    Arrays.stream(expectedEvents).min(EVENT_START_TIMESTAMP_COMPARATOR).get().getStartTimestamp()
+                    Arrays.stream(expectedEvents).min(EVENT_START_TIMESTAMP_COMPARATOR).get().getId().getStartTimestamp()
             );
         }
     }
 
     private static void assertStoredEvent(TestEventSingle actual, Event expected, Timestamp parentTimestamp) {
         assertEquals(
-                new StoredTestEventId(new BookId(expected.getId().getBookName()), expected.getId().getScope(), toInstant(expected.getStartTimestamp()), expected.getId().getId()),
+                new StoredTestEventId(new BookId(expected.getId().getBookName()), expected.getId().getScope(), toInstant(expected.getId().getStartTimestamp()), expected.getId().getId()),
                 actual.getId()
         );
         if (expected.hasParentId()) {
@@ -318,7 +319,7 @@ public class TestEventStore {
         } else {
             assertNull(actual.getParentId(), "Empty parent event id");
         }
-        assertEquals(from(expected.getStartTimestamp()), actual.getStartTimestamp(), "Event start timestamp");
+        assertEquals(from(expected.getId().getStartTimestamp()), actual.getId().getStartTimestamp(), "Event start timestamp");
         assertEquals(from(expected.getEndTimestamp()), actual.getEndTimestamp(), "Event end timestamp");
         assertEquals(expected.getName(), actual.getName(), "Event name");
         assertEquals(expected.getType(), actual.getType(), "Event type");
@@ -329,14 +330,13 @@ public class TestEventStore {
 
     private Event createEvent(String bookName, String scope, String parentId, String name, int numberOfMessages) {
         var eventBuilder = Event.newBuilder()
-                .setId(createEventID(String.valueOf(random.nextLong()), bookName, scope))
-                .setStartTimestamp(createTimestamp())
+                .setId(toEventID(Instant.now(), bookName, scope, String.valueOf(random.nextLong())))
                 .setName(name + '-' + random.nextInt())
                 .setType("type-" + random.nextInt())
                 .setBody(ByteString.copyFrom("msg-" + random.nextInt(), Charset.defaultCharset()))
                 .setStatus(EventStatus.forNumber(random.nextInt(2)));
         if (parentId != null) {
-            eventBuilder.setParentId(createEventID(parentId, bookName, scope));
+            eventBuilder.setParentId(toEventID(Instant.now(), bookName, scope, parentId));
         }
         for (int i = 0; i < numberOfMessages; i++) {
             eventBuilder.addAttachedMessageIds(createMessageId(
@@ -347,7 +347,7 @@ public class TestEventStore {
             ));
         }
         return eventBuilder
-                .setEndTimestamp(createTimestamp())
+                .setEndTimestamp(toTimestamp(Instant.now()))
                 .build();
     }
 
@@ -373,28 +373,11 @@ public class TestEventStore {
                 .build();
     }
 
-    @NotNull
-    private EventID createEventID(String id, String bookName, String scope) {
-        return EventID.newBuilder()
-                .setId(id)
-                .setBookName(bookName)
-                .setScope(scope)
-                .build();
-    }
-
-    protected Timestamp createTimestamp() {
-        Instant now = Instant.now();
-        return Timestamp.newBuilder()
-                .setSeconds(now.getEpochSecond())
-                .setNanos(now.getNano())
-                .build();
-    }
-
     private EventBatch deliveryOf(String bookName, String scope, String parentId, Event... events) {
         var eventBatchBuilder = EventBatch.newBuilder()
                 .addAllEvents(List.of(events));
         if (parentId != null) {
-            eventBatchBuilder.setParentEventId(createEventID(parentId, bookName, scope));
+            eventBatchBuilder.setParentEventId(toEventID(Instant.now(), bookName, scope, parentId));
         }
         return eventBatchBuilder.build();
     }
