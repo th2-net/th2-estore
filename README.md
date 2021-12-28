@@ -1,4 +1,4 @@
-# Overview (3.5.2)
+# Overview (3.6.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -46,7 +46,7 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Changes
 
-## 3.5.2
+## 3.6.0
 
 + Update common version from `3.30.0` to `3.31.6`
 
