@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,7 +14,7 @@
 package com.exactpro.th2.estore;
 
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static com.exactpro.th2.estore.ProtoUtil.EVENT_START_TIMESTAMP_COMPARATOR;
+import static com.exactpro.th2.estore.ProtoUtil.getMinStartTimestamp;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
@@ -49,7 +49,6 @@ import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
-import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
@@ -194,7 +193,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
-        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent, protoEvent.getId().getStartTimestamp());
+        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent);
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
@@ -216,8 +215,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
-        Event eventWithMinTimestamp = protoBatch.getEventsList().stream().min(EVENT_START_TIMESTAMP_COMPARATOR).get();
-        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch, eventWithMinTimestamp.getId());
+        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch);
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
@@ -236,23 +234,20 @@ public class ReportRabbitMQEventStoreService {
                 .thenApply(unused -> cradleBatch.getId());
     }
 
-    private TestEventBatchToStore toCradleBatch(
-            EventBatchOrBuilder protoEventBatch,
-            EventID eventIdWithMinTimestamp
-    ) throws CradleStorageException {
-        TestEventBatchToStore cradleEventsBatch = cradleStorage.getEntitiesFactory()
+    private TestEventBatchToStore toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
+        TestEventBatchToStore cradleEventBatch = cradleStorage.getEntitiesFactory()
                 .testEventBatchBuilder()
                 .id(
                         new BookId(protoEventBatch.getParentEventId().getBookName()),
-                        eventIdWithMinTimestamp.getScope(),
-                        toInstant(eventIdWithMinTimestamp.getStartTimestamp()),
+                        protoEventBatch.getParentEventId().getScope(),
+                        toInstant(getMinStartTimestamp(protoEventBatch.getEventsList())),
                         UUID.randomUUID().toString()
                 )
-                .parentId(toCradleEventID(protoEventBatch.getParentEventId(), eventIdWithMinTimestamp.getStartTimestamp()))
+                .parentId(toCradleEventID(protoEventBatch.getParentEventId()))
                 .build();
         for (Event protoEvent : protoEventBatch.getEventsList()) {
-            cradleEventsBatch.addTestEvent(toCradleEvent(protoEvent, eventIdWithMinTimestamp.getStartTimestamp()));
+            cradleEventBatch.addTestEvent(toCradleEvent(protoEvent));
         }
-        return cradleEventsBatch;
+        return cradleEventBatch;
     }
 }
