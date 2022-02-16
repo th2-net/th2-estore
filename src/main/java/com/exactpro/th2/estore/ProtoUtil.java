@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 package com.exactpro.th2.estore;
+
+import java.util.stream.Collectors;
 
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventId;
@@ -39,7 +41,11 @@ public class ProtoUtil {
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
-                .content(protoEvent.getBody().toByteArray());
+                .content(protoEvent.getBody().toByteArray())
+                .messageIds(protoEvent.getAttachedMessageIdsList().stream()
+                        .map(ProtoUtil::toStoredMessageId)
+                        .collect(Collectors.toList())
+                );
         if (protoEvent.hasParentId()) {
             builder.parentId(toCradleEventID(protoEvent.getParentId()));
         }
