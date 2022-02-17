@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2021-2022 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.estore;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
@@ -31,15 +32,16 @@ import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
+import com.google.protobuf.Timestamp;
 import com.google.protobuf.TimestampOrBuilder;
 
 import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
-    public static Comparator<Event> EVENT_START_TIMESTAMP_COMPARATOR = Comparator
-            .<Event>comparingLong(event -> event.getId().getStartTimestamp().getSeconds())
-            .thenComparingInt(event -> event.getId().getStartTimestamp().getNanos());
+    private static final Comparator<Timestamp> TIMESTAMP_COMPARATOR = Comparator
+            .comparingLong(Timestamp::getSeconds)
+            .thenComparingInt(Timestamp::getNanos);
 
     public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId, TimestampOrBuilder timestamp) {
         return new StoredMessageId(
@@ -51,10 +53,10 @@ public class ProtoUtil {
         );
     }
 
-    public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent, TimestampOrBuilder parentTimestamp) throws CradleStorageException {
+    public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
         TestEventSingleToStoreBuilder builder = TestEventToStore
                 .singleBuilder()
-                .id(toCradleEventID(protoEvent.getId(), protoEvent.getId().getStartTimestamp()))
+                .id(toCradleEventID(protoEvent.getId()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
@@ -63,7 +65,7 @@ public class ProtoUtil {
                         .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {
-            builder.parentId(toCradleEventID(protoEvent.getParentId(), parentTimestamp));
+            builder.parentId(toCradleEventID(protoEvent.getParentId()));
         }
         if (protoEvent.hasEndTimestamp()) {
             builder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
@@ -71,11 +73,11 @@ public class ProtoUtil {
         return builder.build();
     }
 
-    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID, TimestampOrBuilder startTimestamp) {
+    public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID) {
         return new StoredTestEventId(
                 new BookId(protoEventID.getBookName()),
                 protoEventID.getScope(),
-                toInstant(startTimestamp),
+                toInstant(protoEventID.getStartTimestamp()),
                 String.valueOf(protoEventID.getId())
         );
     }
@@ -92,5 +94,15 @@ public class ProtoUtil {
             default:
                 throw new IllegalArgumentException("Unknown the event status '" + protoEventStatus + '\'');
         }
+    }
+
+    public static Timestamp getMinStartTimestamp(Collection<Event> events) {
+        if (events == null || events.isEmpty()) {
+            throw new IllegalArgumentException("Events cannot be null or empty");
+        }
+        return events.stream()
+                .map(event -> event.getId().getStartTimestamp())
+                .min(TIMESTAMP_COMPARATOR)
+                .get();
     }
 }

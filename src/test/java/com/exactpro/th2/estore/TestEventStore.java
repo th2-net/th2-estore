@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,10 +13,9 @@
 
 package com.exactpro.th2.estore;
 
+import static com.exactpro.th2.common.event.Event.start;
 import static com.exactpro.th2.common.event.EventUtils.toEventID;
-import static com.exactpro.th2.common.event.EventUtils.toTimestamp;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static com.exactpro.th2.estore.ProtoUtil.EVENT_START_TIMESTAMP_COMPARATOR;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,16 +30,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -54,7 +48,6 @@ import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.TestEventBatchToStore;
@@ -65,15 +58,14 @@ import com.exactpro.th2.common.grpc.ConnectionID;
 import com.exactpro.th2.common.grpc.Direction;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.EventStatus;
+import com.exactpro.th2.common.grpc.EventID;
 import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Timestamp;
-import com.google.protobuf.TimestampOrBuilder;
 
 public class TestEventStore {
-    private final Random random = new Random();
+    private static final String ROOT_ID = "root-id";
+    private static final Random RANDOM = new Random();
+
     private final CradleManager cradleManagerMock = mock(CradleManager.class);
     private final CradleStorage storageMock = mock(CradleStorage.class);
     @SuppressWarnings("unchecked")
@@ -95,306 +87,217 @@ public class TestEventStore {
     @Test
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws IOException, CradleStorageException {
-        eventStore.handle(deliveryOf(bookName(1), scope(1)));
+        eventStore.handle(deliveryOf());
         verify(storageMock, never()).storeTestEventAsync(any());
     }
 
     @Test
     @DisplayName("root event without message")
     public void testRootEventDelivery() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        Event first = createEvent(bookName, scope, "root");
-        eventStore.handle(deliveryOf(bookName, scope, first));
+        Event event = start().toProto(randomBookName(), randomScope());
+        eventStore.handle(deliveryOf(event));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
-        TestEventSingleToStore value = capture.getValue();
-        assertNotNull(value, "Captured stored root event");
-        assertStoredEvent(value, first, first.getId().getStartTimestamp());
+        TestEventSingleToStore capturedValue = capture.getValue();
+        assertNotNull(capturedValue, "Captured stored root event");
+        assertStoredEvent(event, capturedValue);
     }
 
     @Test
     @DisplayName("sub-event without message")
     public void testSubEventDelivery() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        Event first = createEvent(bookName, scope, "root-id", "sub-event");
-        eventStore.handle(deliveryOf(bookName, scope, first));
+        Event event = start().name("sub-event").toProto(createRandomEventId());
+        eventStore.handle(deliveryOf(event));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
-        TestEventSingleToStore value = capture.getValue();
-        assertNotNull(value, "Captured stored sub-event");
-        assertStoredEvent(value, first, first.getId().getStartTimestamp());
+        TestEventSingleToStore capturedValue = capture.getValue();
+        assertNotNull(capturedValue, "Captured stored sub-event");
+        assertStoredEvent(event, capturedValue);
     }
 
     @Test
     @DisplayName("multiple sub-events without messages")
     public void testMultipleSubEventsDelivery() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        Event first = createEvent(bookName, scope, "root-id", "sub-event-first");
-        Event second = createEvent(bookName, scope, "root-id", "sub-event-second");
-        eventStore.handle(deliveryOf(bookName, scope, first, second));
+        EventID parentId = createRandomEventId();
+        Event first = start().name("sub-event-first").toProto(parentId);
+        Event second = start().name("sub-event-second").toProto(parentId);
+        eventStore.handle(deliveryOf(first, second));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+        List<TestEventSingleToStore> capturedValues = capture.getAllValues();
 
-        TestEventSingleToStore value = capture.getAllValues().get(0);
-        assertNotNull(value, "Captured first stored event");
-        assertStoredEvent(value, first, first.getId().getStartTimestamp());
+        TestEventSingleToStore capturedValue = capture.getAllValues().get(0);
+        assertNotNull(capturedValue, "Captured first stored event");
+        assertStoredEvent(first, capturedValues.get(0));
 
-        value = capture.getAllValues().get(1);
-        assertNotNull(value, "Captured second stored event");
-        assertStoredEvent(value, second, second.getId().getStartTimestamp());
+        capturedValue = capture.getAllValues().get(1);
+        assertNotNull(capturedValue, "Captured second stored event");
+        assertStoredEvent(second, capturedValues.get(1));
     }
 
     @Test
     @DisplayName("Event batch with two events without messages")
     public void testEventsBatchDelivery() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        String parentId = "root-id";
-        Event first = createEvent(bookName, scope, parentId, "sub-event-first");
-        Event second = createEvent(bookName, scope, parentId, "sub-event-second");
-        assertAndReturnTestEventBatchToStore(
-                bookName,
-                scope,
-                parentId,
-                first,
-                second,
-                first.getId().getStartTimestamp()
-        );
+        EventID parentId = createRandomEventId();
+        Event first = start().name("sub-event-first").toProto(parentId);
+        Event second = start().name("sub-event-second").toProto(parentId);
+        assertTestEventBatchToStore(parentId, first, second);
     }
 
     @Test
     @DisplayName("Event batch with two events in descending start time order without messages")
     public void testEventsBatchDeliveryDescendingStartTime() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        String parentId = "root-id";
-        Event second = createEvent(bookName, scope, parentId, "sub-event-second");
-        Event first = createEvent(bookName, scope, parentId, "sub-event-first");
-        assertAndReturnTestEventBatchToStore(
-                bookName,
-                scope,
-                parentId,
-                first,
-                second,
-                second.getId().getStartTimestamp()
-        );
+        EventID parentId = createRandomEventId();
+        Event second = start().name("sub-event-second").toProto(parentId);
+        Event first = start().name("sub-event-first").toProto(parentId);
+        assertTestEventBatchToStore(parentId, first, second);
     }
 
     @Test
     @DisplayName("Event batch with two events and messages")
     public void testEventsBatchDeliveryWithMessages() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        String parentId = "root-id";
-        Event first = createEvent(bookName, scope, parentId, "sub-event-first", 2);
-        Event second = createEvent(bookName, scope, parentId, "sub-event-second", 2);
-        TestEventBatchToStore testEventBatchToStore = assertAndReturnTestEventBatchToStore(
-                bookName,
-                scope,
+        EventID parentId = createRandomEventId();
+        assertTestEventBatchToStore(
                 parentId,
-                first,
-                second,
-                first.getId().getStartTimestamp()
+                start()
+                        .name("sub-event-first")
+                        .messageID(createRandomMessageId(parentId))
+                        .messageID(createRandomMessageId(parentId))
+                        .toProto(parentId),
+                start()
+                        .name("sub-event-second")
+                        .messageID(createRandomMessageId(parentId))
+                        .messageID(createRandomMessageId(parentId))
+                        .toProto(parentId)
         );
-
-        List<BatchedStoredTestEvent> batchedStoredTestEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
-        StoredTestEventId firstStoredEventId = batchedStoredTestEvents.get(0).getId();
-        StoredTestEventId secondStoredEventId = batchedStoredTestEvents.get(1).getId();
-
-        Map<StoredTestEventId, Set<StoredMessageId>> eventIdToMessageIds = testEventBatchToStore.getBatchMessages();
-        assertEventAndStoredEvent(first, firstStoredEventId, eventIdToMessageIds.get(firstStoredEventId));
-        assertEventAndStoredEvent(second, secondStoredEventId, eventIdToMessageIds.get(secondStoredEventId));
-    }
-
-    private TestEventBatchToStore assertAndReturnTestEventBatchToStore(
-            String bookName,
-            String scope,
-            String parentId,
-            Event first,
-            Event second,
-            Timestamp expectedTimestamp
-    ) throws IOException, CradleStorageException {
-        eventStore.handle(deliveryOf(bookName, scope, parentId, first, second));
-
-        ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-
-        TestEventBatchToStore testEventBatchToStore = capture.getValue();
-        assertNotNull(testEventBatchToStore, "Captured stored event batch");
-        assertStoredEventBatch(
-                bookName,
-                scope,
-                expectedTimestamp,
-                parentId,
-                testEventBatchToStore,
-                first,
-                second
-        );
-        return testEventBatchToStore;
     }
 
     @Test
     @DisplayName("Root event with three messages")
     public void testRootEventWithMessagesDelivery() throws IOException, CradleStorageException {
-        String bookName = bookName(random.nextInt());
-        String scope = scope(random.nextInt());
-        Event first = createEvent(bookName, scope, "root", 3);
-        eventStore.handle(deliveryOf(bookName, scope, first));
+        EventID parentId = createRandomEventId();
+        Event first = start()
+                .messageID(createRandomMessageId(parentId))
+                .messageID(createRandomMessageId(parentId))
+                .messageID(createRandomMessageId(parentId))
+                .toProto(parentId);
+        eventStore.handle(deliveryOf(first));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> captureEvent = ArgumentCaptor.forClass(TestEventSingleToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
 
-        TestEventSingleToStore capturedEvent = captureEvent.getValue();
-        assertNotNull(capturedEvent, "Captured stored event");
-        assertStoredEvent(capturedEvent, first, first.getId().getStartTimestamp());
-
-        assertEventAndStoredEvent(first, capturedEvent.getId(), capturedEvent.getMessages());
+        TestEventSingleToStore capturedValue = captureEvent.getValue();
+        assertNotNull(capturedValue, "Captured stored event");
+        assertStoredEvent(first, capturedValue);
     }
 
-    private void assertEventAndStoredEvent(Event event, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
-        assertNotNull(capturedEventId);
-        assertEquals(
-                new StoredTestEventId(new BookId(event.getId().getBookName()), event.getId().getScope(), toInstant(event.getId().getStartTimestamp()), event.getId().getId()),
-                capturedEventId
-        );
-        assertAttachedMessages(event, messageIds);
-    }
+    private void assertTestEventBatchToStore(EventID parentId, Event first, Event second) throws IOException, CradleStorageException {
+        eventStore.handle(deliveryOf(parentId, first, second));
 
-    private static void assertAttachedMessages(Event event, Collection<StoredMessageId> messageIds) {
-        assertEquals(
-                event.getAttachedMessageIdsList().stream().map(messageId -> ProtoUtil.toStoredMessageId(messageId, event.getId().getStartTimestamp())).collect(Collectors.toSet()),
-                new HashSet<>(messageIds)
-        );
-    }
+        ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
-    private static void assertStoredEventBatch(
-            String expectedBookName,
-            String expectedScope,
-            Timestamp expectedTimestamp,
-            String expectedId,
-            TestEventBatchToStore actualBatch,
-            Event... expectedEvents
-    ) {
+        TestEventBatchToStore testEventBatchToStore = capture.getValue();
         assertEquals(
-                new StoredTestEventId(new BookId(expectedBookName), expectedScope, toInstant(expectedTimestamp), expectedId),
-                actualBatch.getParentId()
+                new StoredTestEventId(
+                        new BookId(parentId.getBookName()),
+                        parentId.getScope(),
+                        toInstant(parentId.getStartTimestamp()),
+                        parentId.getId()
+                ),
+                testEventBatchToStore.getParentId()
         );
-        assertEquals(expectedEvents.length, actualBatch.getTestEvents().size(), "Event batch size");
-        List<BatchedStoredTestEvent> actualEvents = new ArrayList<>(actualBatch.getTestEvents());
-        for (int i = 0; i < expectedEvents.length; i++) {
-            assertStoredEvent(
-                    actualEvents.get(i),
-                    expectedEvents[i],
-                    Arrays.stream(expectedEvents).min(EVENT_START_TIMESTAMP_COMPARATOR).get().getId().getStartTimestamp()
-            );
+        List<Event> expectedEvents = List.of(first, second);
+        List<BatchedStoredTestEvent> actualEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
+        assertEquals(expectedEvents.size(), actualEvents.size(), "Event batch size");
+        for (int i = 0; i < expectedEvents.size(); i++) {
+            assertStoredEvent(expectedEvents.get(i), actualEvents.get(i));
         }
     }
 
-    private static void assertStoredEvent(TestEventSingle actual, Event expected, Timestamp parentTimestamp) {
+    private static void assertStoredEvent(Event expected, TestEventSingle actual) {
+        assertNotNull(actual.getId());
         assertEquals(
-                new StoredTestEventId(new BookId(expected.getId().getBookName()), expected.getId().getScope(), toInstant(expected.getId().getStartTimestamp()), expected.getId().getId()),
+                new StoredTestEventId(
+                        new BookId(expected.getId().getBookName()),
+                        expected.getId().getScope(),
+                        toInstant(expected.getId().getStartTimestamp()),
+                        expected.getId().getId()
+                ),
                 actual.getId()
         );
         if (expected.hasParentId()) {
             assertEquals(
-                    new StoredTestEventId(new BookId(expected.getParentId().getBookName()), expected.getParentId().getScope(), toInstant(parentTimestamp), expected.getParentId().getId()),
+                    new StoredTestEventId(
+                            new BookId(expected.getParentId().getBookName()),
+                            expected.getParentId().getScope(),
+                            toInstant(expected.getParentId().getStartTimestamp()),
+                            expected.getParentId().getId()
+                    ),
                     actual.getParentId()
             );
         } else {
             assertNull(actual.getParentId(), "Empty parent event id");
         }
-        assertEquals(from(expected.getId().getStartTimestamp()), actual.getId().getStartTimestamp(), "Event start timestamp");
-        assertEquals(from(expected.getEndTimestamp()), actual.getEndTimestamp(), "Event end timestamp");
+        assertEquals(toInstant(expected.getId().getStartTimestamp()), actual.getId().getStartTimestamp(), "Event start timestamp");
+        assertEquals(toInstant(expected.getEndTimestamp()), actual.getEndTimestamp(), "Event end timestamp");
         assertEquals(expected.getName(), actual.getName(), "Event name");
         assertEquals(expected.getType(), actual.getType(), "Event type");
         assertArrayEquals(expected.getBody().toByteArray(), actual.getContent(), "Event context");
         assertEquals(ProtoUtil.isSuccess(expected.getStatus()), actual.isSuccess(), "Event status");
-        assertAttachedMessages(expected, actual.getMessages());
+        assertEquals(
+                expected.getAttachedMessageIdsList().stream()
+                        .map(messageId -> ProtoUtil.toStoredMessageId(messageId, expected.getId().getStartTimestamp()))
+                        .collect(Collectors.toSet()),
+                new HashSet<>(actual.getMessages())
+        );
     }
 
-    private Event createEvent(String bookName, String scope, String parentId, String name, int numberOfMessages) {
-        var eventBuilder = Event.newBuilder()
-                .setId(toEventID(Instant.now(), bookName, scope, String.valueOf(random.nextLong())))
-                .setName(name + '-' + random.nextInt())
-                .setType("type-" + random.nextInt())
-                .setBody(ByteString.copyFrom("msg-" + random.nextInt(), Charset.defaultCharset()))
-                .setStatus(EventStatus.forNumber(random.nextInt(2)));
-        if (parentId != null) {
-            eventBuilder.setParentId(toEventID(Instant.now(), bookName, scope, parentId));
-        }
-        for (int i = 0; i < numberOfMessages; i++) {
-            eventBuilder.addAttachedMessageIds(createMessageId(
-                    "session-alias-" + random.nextInt(),
-                    Direction.forNumber(random.nextInt(2)),
-                    random.nextLong(),
-                    bookName
-            ));
-        }
-        return eventBuilder
-                .setEndTimestamp(toTimestamp(Instant.now()))
-                .build();
+    private static EventID createRandomEventId() {
+        return toEventID(Instant.now(), randomBookName(), randomScope(), ROOT_ID);
     }
 
-    private Event createEvent(String bookName, String scope, String name) {
-        return createEvent(bookName, scope, null, name, 0);
+    private static String randomBookName() {
+        return "book-name-" + RANDOM.nextInt();
     }
 
-    private Event createEvent(String bookName, String scope, String parentId, String name) {
-        return createEvent(bookName, scope, parentId, name, 0);
+    private static String randomScope() {
+        return "scope-" + RANDOM.nextInt();
     }
 
-    private Event createEvent(String bookName, String scope, String name, int numberOfMessages) {
-        return createEvent(bookName, scope, null, name, numberOfMessages);
+    private static EventBatch deliveryOf(Event... events) {
+        return deliveryOf(null, events);
     }
 
-    @NotNull
-    protected MessageID createMessageId(String sessionAlias, Direction direction, long sequence, String bookName) {
-        return MessageID.newBuilder()
-                .setConnectionId(ConnectionID.newBuilder().setSessionAlias(sessionAlias).build())
-                .setDirection(direction)
-                .setSequence(sequence)
-                .setBookName(bookName)
-                .build();
-    }
-
-    private EventBatch deliveryOf(String bookName, String scope, String parentId, Event... events) {
+    private static EventBatch deliveryOf(EventID parentId, Event... events) {
         var eventBatchBuilder = EventBatch.newBuilder()
                 .addAllEvents(List.of(events));
         if (parentId != null) {
-            eventBatchBuilder.setParentEventId(toEventID(Instant.now(), bookName, scope, parentId));
+            eventBatchBuilder.setParentEventId(parentId);
         }
         return eventBatchBuilder.build();
     }
 
-    private EventBatch deliveryOf(String bookName, String scope, Event... events) {
-        return deliveryOf(bookName, scope, null, events);
-    }
-
-    private static Instant from(TimestampOrBuilder timestamp) {
-        return Instant.ofEpochSecond(timestamp.getSeconds(), timestamp.getNanos());
-    }
-
-    private static String bookName(int i) {
-        return "book-name-" + i;
-    }
-
-    private static String scope(int i) {
-        return "scope-" + i;
+    @NotNull
+    private static MessageID createRandomMessageId(EventID parentId) {
+        return MessageID.newBuilder()
+                .setConnectionId(ConnectionID.newBuilder().setSessionAlias("session-alias-" + RANDOM.nextInt()).build())
+                .setDirection(Direction.forNumber(RANDOM.nextInt(2)))
+                .setSequence(RANDOM.nextLong())
+                .setBookName(parentId.getBookName())
+                .build();
     }
 }
