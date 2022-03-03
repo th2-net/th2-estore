@@ -46,7 +46,7 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Changes
 
-## 3.6.0
+## 3.7.0
 
 + Common with publish/consume connections and fixed recovery
 
