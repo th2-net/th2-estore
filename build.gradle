@@ -57,7 +57,7 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
-    implementation 'com.exactpro.th2:common:3.31.6'
+    implementation 'com.exactpro.th2:common:3.31.6-TH2-3329-1992474616-SNAPSHOT'
 
     implementation "org.jetbrains:annotations"
 
