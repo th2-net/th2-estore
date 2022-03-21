@@ -43,12 +43,12 @@ public class ProtoUtil {
             .comparingLong(Timestamp::getSeconds)
             .thenComparingInt(Timestamp::getNanos);
 
-    public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId, TimestampOrBuilder timestamp) {
+    public static StoredMessageId toStoredMessageId(MessageIDOrBuilder messageId) {
         return new StoredMessageId(
                 new BookId(messageId.getBookName()),
                 messageId.getConnectionId().getSessionAlias(),
                 toCradleDirection(messageId.getDirection()),
-                toInstant(timestamp),
+                toInstant(messageId.getTimestamp()),
                 messageId.getSequence()
         );
     }
@@ -61,7 +61,7 @@ public class ProtoUtil {
                 .type(protoEvent.getType())
                 .success(isSuccess(protoEvent.getStatus()))
                 .messages(protoEvent.getAttachedMessageIdsList().stream()
-                        .map(messageId -> toStoredMessageId(messageId, protoEvent.getId().getStartTimestamp()))
+                        .map(messageId -> toStoredMessageId(messageId))
                         .collect(Collectors.toSet()))
                 .content(protoEvent.getBody().toByteArray());
         if (protoEvent.hasParentId()) {
