@@ -32,13 +32,18 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import com.exactpro.th2.common.message.MessageUtils;
+import com.exactpro.th2.common.util.StorageUtils;
+import com.google.protobuf.Timestamp;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -258,9 +263,17 @@ public class TestEventStore {
         assertEquals(expected.getType(), actual.getType(), "Event type");
         assertArrayEquals(expected.getBody().toByteArray(), actual.getContent(), "Event context");
         assertEquals(ProtoUtil.isSuccess(expected.getStatus()), actual.isSuccess(), "Event status");
+
+//        var actualIds = new ArrayList<>(actual.getMessages());
+//        for (int i = 0; i < expected.getAttachedMessageIdsList().size(); i++) {
+//            var expectedId = expected.getAttachedMessageIdsList().get(i);
+//            var actualId = actualIds.get(i);
+//            Assertions.assertEquals(expectedId.getTimestamp(), MessageUtils.toTimestamp(actualId.getTimestamp()));
+//        }
+
         assertEquals(
                 expected.getAttachedMessageIdsList().stream()
-                        .map(messageId -> ProtoUtil.toStoredMessageId(messageId, expected.getId().getStartTimestamp()))
+                        .map(ProtoUtil::toStoredMessageId)
                         .collect(Collectors.toSet()),
                 new HashSet<>(actual.getMessages())
         );
@@ -298,6 +311,7 @@ public class TestEventStore {
                 .setDirection(Direction.forNumber(RANDOM.nextInt(2)))
                 .setSequence(RANDOM.nextLong())
                 .setBookName(parentId.getBookName())
+                .setTimestamp(com.exactpro.th2.common.message.MessageUtils.toTimestamp(Date.from(Instant.now())))
                 .build();
     }
 }

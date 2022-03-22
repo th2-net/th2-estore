@@ -99,18 +99,12 @@ public class ReportRabbitMQEventStoreService {
             if (eventBatch.hasParentEventId()) {
                 storeEventBatch(eventBatch);
             } else {
-                if (events.size() == 1) {
-                    storeEvent(events.get(0));
-                } else {
-                    for (Event event : events) {
-                        storeEvent(event);
-                    }
+                for (Event event : events) {
+                    storeEvent(event);
                 }
             }
         } catch (CradleStorageException | IOException e) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
-            }
+            LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             throw new RuntimeException("Failed to store event batch", e);
         }
 
