@@ -46,6 +46,11 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Changes
 
+## 3.7.0
+
++ Update common version from `3.31.6` to `3.34.0-th2-3129-2028113104-SNAPSHOT`
++ Update Cradle version from `2.20.2` to `2.21.0`
+
 ## 3.6.0
 
 + Update common version from `3.30.0` to `3.31.6`
