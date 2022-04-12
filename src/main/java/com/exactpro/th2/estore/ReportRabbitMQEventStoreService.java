@@ -74,12 +74,11 @@ public class ReportRabbitMQEventStoreService {
                     LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
                 }
             }, ATTRIBUTES);
-            if (monitor != null) {
-                LOGGER.info("RabbitMQ subscribing was successful");
-            } else {
+            if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");
                 throw new RuntimeException("Cannot find queues for subscribe");
             }
+            LOGGER.info("RabbitMQ subscribing was successful");
         }
     }
 
