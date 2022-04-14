@@ -10,6 +10,7 @@ Every event contains important parts:
 * parent id - optional link to parent event
 * description - set of fields for short description
 * body - useful data in JSON format
+* attachedMessageIDs - the list of message IDs that are linked to the event
 
 # Custom resources for infra-mgr
 
