@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -31,7 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -39,7 +38,6 @@ import org.slf4j.LoggerFactory;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
@@ -48,7 +46,6 @@ import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
-import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
@@ -77,12 +74,11 @@ public class ReportRabbitMQEventStoreService {
                     LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
                 }
             }, ATTRIBUTES);
-            if (monitor != null) {
-                LOGGER.info("RabbitMQ subscribing was successful");
-            } else {
+            if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");
                 throw new RuntimeException("Cannot find queues for subscribe");
             }
+            LOGGER.info("RabbitMQ subscribing was successful");
         }
     }
 
@@ -203,8 +199,7 @@ public class ReportRabbitMQEventStoreService {
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
-                )
-                .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent), executor);
+                );
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -225,10 +220,7 @@ public class ReportRabbitMQEventStoreService {
 
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
-                        cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()))
-                .thenComposeAsync(unused -> CompletableFuture.allOf(
-                        protoBatch.getEventsList().stream().map(it -> storeAttachedMessages(cradleBatch.getId(), it)).toArray(CompletableFuture[]::new)
-                ), executor);
+                        cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
         futuresToComplete.put(result, protoBatch);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -242,28 +234,6 @@ public class ReportRabbitMQEventStoreService {
                     }
                 }, executor)
                 .thenApply(unused -> cradleBatch.getId());
-    }
-
-    private CompletableFuture<Void> storeAttachedMessages(StoredTestEventId batchID, Event protoEvent) {
-        List<MessageID> attachedMessageIds = protoEvent.getAttachedMessageIdsList();
-        if (!attachedMessageIds.isEmpty()) {
-            List<StoredMessageId> messagesIds = attachedMessageIds.stream()
-                    .map(ProtoUtil::toStoredMessageId)
-                    .collect(Collectors.toList());
-
-            return cradleStorage.storeTestEventMessagesLinkAsync(
-                    toCradleEventID(protoEvent.getId()),
-                    batchID,
-                    messagesIds
-            ).whenComplete((result, ex) -> {
-                if (ex == null) {
-                    LOGGER.debug("Stored attached messages '{}' to event id '{}'", messagesIds, protoEvent.getId().getId());
-                } else {
-                    LOGGER.error("Storing attached messages '{}' to event id '{}' failed", messagesIds, protoEvent.getId(), ex);
-                }
-            });
-        }
-        return CompletableFuture.completedFuture(null);
     }
 
     private StoredTestEventBatch toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
