@@ -81,7 +81,7 @@ public class TestEventStore {
 
     @BeforeEach
     void setUp() throws IOException, CradleStorageException {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_DURATION_LIMIT_SECONDS, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
         when(storageMock.getEntitiesFactory()).thenReturn(cradleEntitiesFactory);
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
