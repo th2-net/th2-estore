@@ -86,7 +86,7 @@ public class TestEventStore {
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock));
+        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock, 50));
     }
 
     @Test

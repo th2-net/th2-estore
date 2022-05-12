@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -61,11 +62,13 @@ public class ReportRabbitMQEventStoreService {
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
     private final MessageRouter<EventBatch> router;
     private final CradleStorage cradleStorage;
+    private final Semaphore semaphore;
     private SubscriberMonitor monitor;
 
-    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
+    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager, int semaphoreCount) {
         this.router = requireNonNull(router, "Message router can't be null");
         cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.semaphore = new Semaphore(semaphoreCount, true);
     }
 
     public void start() {
@@ -111,7 +114,7 @@ public class ReportRabbitMQEventStoreService {
                     }
                 }
             }
-        } catch (CradleStorageException | IOException e) {
+        } catch (CradleStorageException | IOException | InterruptedException e) {
             if (LOGGER.isErrorEnabled()) {
                 LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             }
@@ -196,7 +199,7 @@ public class ReportRabbitMQEventStoreService {
         });
     }
 
-    private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
+    private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
 
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
@@ -205,6 +208,7 @@ public class ReportRabbitMQEventStoreService {
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
                 )
                 .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent), executor);
+        semaphore.acquire();
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -215,12 +219,14 @@ public class ReportRabbitMQEventStoreService {
                         if (LOGGER.isWarnEnabled()) {
                             LOGGER.warn("Future related to the event '{}' is already removed from map", shortDebugString(protoEvent));
                         }
+                    } else {
+                        semaphore.release();
                     }
                 }, executor)
                 .thenApply(unused -> cradleEventSingle.getId());
     }
 
-    private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
+    private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
 
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
@@ -229,6 +235,7 @@ public class ReportRabbitMQEventStoreService {
                 .thenComposeAsync(unused -> CompletableFuture.allOf(
                         protoBatch.getEventsList().stream().map(it -> storeAttachedMessages(cradleBatch.getId(), it)).toArray(CompletableFuture[]::new)
                 ), executor);
+        semaphore.acquire();
         futuresToComplete.put(result, protoBatch);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -239,6 +246,8 @@ public class ReportRabbitMQEventStoreService {
                         if (LOGGER.isWarnEnabled()) {
                             LOGGER.warn("Future related to the batch '{}' is already removed from map", shortDebugString(protoBatch));
                         }
+                    } else {
+                        semaphore.release();
                     }
                 }, executor)
                 .thenApply(unused -> cradleBatch.getId());
