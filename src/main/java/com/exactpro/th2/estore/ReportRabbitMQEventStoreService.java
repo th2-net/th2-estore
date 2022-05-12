@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -53,6 +53,7 @@ import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
+import com.exactpro.th2.estore.configuration.CustomConfiguration;
 import com.google.protobuf.MessageOrBuilder;
 
 public class ReportRabbitMQEventStoreService {
@@ -63,12 +64,14 @@ public class ReportRabbitMQEventStoreService {
     private final MessageRouter<EventBatch> router;
     private final CradleStorage cradleStorage;
     private final Semaphore semaphore;
+    private final CustomConfiguration configuration;
     private SubscriberMonitor monitor;
 
-    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager, int semaphoreCount) {
+    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager, CustomConfiguration configuration) {
         this.router = requireNonNull(router, "Message router can't be null");
         cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
-        this.semaphore = new Semaphore(semaphoreCount, true);
+        this.semaphore = new Semaphore(configuration.getParallelism(), true);
+        this.configuration = configuration;
     }
 
     public void start() {
@@ -114,13 +117,20 @@ public class ReportRabbitMQEventStoreService {
                     }
                 }
             }
-        } catch (CradleStorageException | IOException | InterruptedException e) {
-            if (LOGGER.isErrorEnabled()) {
-                LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
-            }
-            throw new RuntimeException("Failed to store event batch", e);
+        } catch (CradleStorageException | IOException e) {
+            catchHandleError(e, eventBatch);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            catchHandleError(ex, eventBatch);
         }
 
+    }
+
+    private void catchHandleError(Exception ex, EventBatch eventBatch) {
+        if (LOGGER.isErrorEnabled()) {
+            LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), ex);
+        }
+        throw new RuntimeException("Failed to store event batch", ex);
     }
 
     public void dispose() {
@@ -201,14 +211,15 @@ public class ReportRabbitMQEventStoreService {
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
-
+        if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
+            throw new InterruptedException("Waiting time for the attempt to save the event has expired");
+        }
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
                 )
                 .thenComposeAsync(unused -> storeAttachedMessages(null, protoEvent), executor);
-        semaphore.acquire();
         futuresToComplete.put(result, protoEvent);
         return result
                 .whenCompleteAsync((unused, ex) -> {
@@ -228,14 +239,15 @@ public class ReportRabbitMQEventStoreService {
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
-
+        if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
+            throw new InterruptedException("Waiting time for the attempt to save the event batch has expired");
+        }
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()))
                 .thenComposeAsync(unused -> CompletableFuture.allOf(
                         protoBatch.getEventsList().stream().map(it -> storeAttachedMessages(cradleBatch.getId(), it)).toArray(CompletableFuture[]::new)
                 ), executor);
-        semaphore.acquire();
         futuresToComplete.put(result, protoBatch);
         return result
                 .whenCompleteAsync((unused, ex) -> {

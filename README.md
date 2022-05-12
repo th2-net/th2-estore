@@ -1,4 +1,4 @@
-# Overview (3.7.0)
+# Overview (3.8.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -37,6 +37,22 @@ spec:
         memory: 100Mi
         cpu: 20m
 ```
+# Custom configuration
+```yaml
+parallelism: 50
+timeout: 1
+timeUnit: MINUTES
+```
+parallelism - quantity of events that can be processed at the same time
+timeout and timeUnit - max time event can wait for it turn. If time is up, thread will be interrupted.
+timeUnit can take values:
+   + NANOSECONDS
+   + MICROSECONDS
+   + MILLISECONDS
+   + SECONDS
+   + MINUTES
+   + HOURS
+   + DAYS
 
 # Common features
 
@@ -45,6 +61,9 @@ This is a list of supported features provided by libraries.
 Please see more details about this feature via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
 
 # Changes
+
+## 3.8.0
++ Add a semaphore to control the number of events being processed at the same time
 
 ## 3.7.0
 
