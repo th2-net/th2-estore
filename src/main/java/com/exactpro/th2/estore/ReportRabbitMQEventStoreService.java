@@ -212,7 +212,7 @@ public class ReportRabbitMQEventStoreService {
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
         if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
-            throw new InterruptedException("Waiting time for the attempt to save the event has expired");
+            throw new RuntimeException("Waiting time for the attempt to save the event has expired");
         }
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
@@ -240,7 +240,7 @@ public class ReportRabbitMQEventStoreService {
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
         if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
-            throw new InterruptedException("Waiting time for the attempt to save the event batch has expired");
+            throw new RuntimeException("Waiting time for the attempt to save the event batch has expired");
         }
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
