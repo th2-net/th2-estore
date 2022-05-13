@@ -39,7 +39,9 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
+import com.exactpro.th2.estore.EventStoreMain.Interrupter;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -87,7 +89,12 @@ public class TestEventStore {
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventMessagesLinkAsync(any(), any(), any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock, new CustomConfiguration()));
+        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock, new CustomConfiguration(), new Interrupter()));
+    }
+
+    @AfterEach
+    void setDown() {
+        eventStore.dispose();
     }
 
     @Test

@@ -65,13 +65,18 @@ public class ReportRabbitMQEventStoreService {
     private final CradleStorage cradleStorage;
     private final Semaphore semaphore;
     private final CustomConfiguration configuration;
+    private final EventStoreMain.Interrupter interrupter;
     private SubscriberMonitor monitor;
 
-    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager, CustomConfiguration configuration) {
+    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router,
+                                           @NotNull CradleManager cradleManager,
+                                           @NotNull CustomConfiguration configuration,
+                                           @NotNull EventStoreMain.Interrupter interrupter) {
         this.router = requireNonNull(router, "Message router can't be null");
-        cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.semaphore = new Semaphore(configuration.getParallelism(), true);
         this.configuration = configuration;
+        this.interrupter = interrupter;
     }
 
     public void start() {
@@ -211,9 +216,7 @@ public class ReportRabbitMQEventStoreService {
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
-        if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
-            throw new RuntimeException("Waiting time for the attempt to save the event has expired");
-        }
+        acquireSemaphore();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
@@ -237,11 +240,16 @@ public class ReportRabbitMQEventStoreService {
                 .thenApply(unused -> cradleEventSingle.getId());
     }
 
+    private void acquireSemaphore() throws InterruptedException {
+        if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
+            interrupter.interrupt();
+            throw new IllegalStateException("Waiting time " + configuration.getTimeout() + " " + configuration.getTimeUnit() + " for the attempt to save the event batch has expired");
+        }
+    }
+
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException, InterruptedException {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
-        if (!semaphore.tryAcquire(configuration.getTimeout(), configuration.getTimeUnit())) {
-            throw new RuntimeException("Waiting time for the attempt to save the event batch has expired");
-        }
+        acquireSemaphore();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()))

@@ -31,10 +31,9 @@ public class EventStoreMain {
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
-        ReentrantLock lock = new ReentrantLock();
-        Condition condition = lock.newCondition();
+        Interrupter interrupter = new Interrupter();
 
-        configureShutdownHook(resources, lock, condition);
+        configureShutdownHook(resources, interrupter);
         try {
             CommonMetrics.setLiveness(true);
             CommonFactory factory = CommonFactory.createFromArguments(args);
@@ -42,12 +41,12 @@ public class EventStoreMain {
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
             CustomConfiguration customConfiguration = factory.getCustomConfiguration(CustomConfiguration.class);
-            ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager, customConfiguration);
+            ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager, customConfiguration, interrupter);
             resources.add(store::dispose);
             store.start();
             CommonMetrics.setReadiness(true);
             LOGGER.info("Event storing started");
-            awaitShutdown(lock, condition);
+            interrupter.await();
         } catch (InterruptedException e) {
             LOGGER.info("The main thread interrupted", e);
         } catch (Exception e) {
@@ -56,29 +55,13 @@ public class EventStoreMain {
         }
     }
 
-    private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {
-        try {
-            lock.lock();
-            LOGGER.info("Wait to shutdown");
-            condition.await();
-            LOGGER.info("App has been shut down");
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private static void configureShutdownHook(Deque<AutoCloseable> resources, ReentrantLock lock, Condition condition) {
+    private static void configureShutdownHook(Deque<AutoCloseable> resources, Interrupter interrupter) {
         Runtime.getRuntime().addShutdownHook(new Thread("Shutdown hook") {
             @Override
             public void run() {
                 LOGGER.info("Shutdown start");
                 CommonMetrics.setReadiness(false);
-                try {
-                    lock.lock();
-                    condition.signalAll();
-                } finally {
-                    lock.unlock();
-                }
+                interrupter.interrupt();
 
                 resources.descendingIterator().forEachRemaining(resource -> {
                     try {
@@ -91,5 +74,31 @@ public class EventStoreMain {
                 LOGGER.info("Shutdown end");
             }
         });
+    }
+
+    public static class Interrupter {
+        private ReentrantLock lock = new ReentrantLock();
+        private Condition condition = lock.newCondition();
+
+        public void await() throws InterruptedException {
+            try {
+                lock.lock();
+                LOGGER.info("Wait to interuption");
+                condition.await();
+                LOGGER.info("Application has been inturrupted");
+            } finally {
+                lock.unlock();
+            }
+        }
+
+        public void interrupt() {
+            try {
+                lock.lock();
+                LOGGER.info("Iterrupt application");
+                condition.signalAll();
+            } finally {
+                lock.unlock();
+            }
+        }
     }
 }
