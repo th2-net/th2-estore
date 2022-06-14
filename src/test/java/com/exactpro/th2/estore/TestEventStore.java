@@ -13,59 +13,32 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.th2.common.event.Event.start;
-import static com.exactpro.th2.common.event.EventUtils.toEventID;
-import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import com.exactpro.th2.common.message.MessageUtils;
-import com.exactpro.th2.common.util.StorageUtils;
-import com.google.protobuf.Timestamp;
+import com.exactpro.cradle.BookId;
+import com.exactpro.cradle.CradleEntitiesFactory;
+import com.exactpro.cradle.CradleManager;
+import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.testevents.*;
+import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.schema.message.MessageRouter;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import com.exactpro.cradle.BookId;
-import com.exactpro.cradle.CradleEntitiesFactory;
-import com.exactpro.cradle.CradleManager;
-import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
-import com.exactpro.cradle.testevents.StoredTestEventId;
-import com.exactpro.cradle.testevents.TestEventBatchToStore;
-import com.exactpro.cradle.testevents.TestEventSingle;
-import com.exactpro.cradle.testevents.TestEventSingleToStore;
-import com.exactpro.cradle.utils.CradleStorageException;
-import com.exactpro.th2.common.grpc.ConnectionID;
-import com.exactpro.th2.common.grpc.Direction;
-import com.exactpro.th2.common.grpc.Event;
-import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.EventID;
-import com.exactpro.th2.common.grpc.MessageID;
-import com.exactpro.th2.common.schema.message.MessageRouter;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import static com.exactpro.th2.common.event.Event.start;
+import static com.exactpro.th2.common.event.EventUtils.toEventID;
+import static com.exactpro.th2.common.util.StorageUtils.toInstant;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 public class TestEventStore {
     private static final String ROOT_ID = "root-id";
@@ -81,7 +54,7 @@ public class TestEventStore {
 
     @BeforeEach
     void setUp() throws IOException, CradleStorageException {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_DURATION_LIMIT_SECONDS, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
         when(storageMock.getEntitiesFactory()).thenReturn(cradleEntitiesFactory);
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
