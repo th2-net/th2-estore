@@ -8,6 +8,7 @@ plugins {
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
     junitJupiterEngineVersion   = '5.4.0'
+    cradleVersion   = '5.0.0-dev-version-5-2662308341-SNAPSHOT'
 }
 
 group = 'com.exactpro.th2'
@@ -58,6 +59,8 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'com.exactpro.th2:common:5.0.0-dev-version-5-2567706074-SNAPSHOT'
+    implementation "com.exactpro.th2:cradle-core:$cradleVersion"
+    implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
     implementation "org.jetbrains:annotations"
 
