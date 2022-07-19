@@ -20,6 +20,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
@@ -56,18 +57,24 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
             try {
                 StoredTestEvent event = eventBatchQueue.poll(POLL_WAIT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
                 if (event != null)
-                    consume(event);
-
+                    try {
+                        storeEvent(event);
+                    } catch (IOException e) {
+                        LOGGER.error("Exception storing event with id '{}'", event.getId(), e);
+                        addToQueue(event);
+                    }
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. Ignoring");
             }
         }
     }
 
+
     @Override
-    public void persist(StoredTestEvent data) throws Exception {
-        eventBatchQueue.offer(data);
+    public void persist(StoredTestEvent data) {
+        addToQueue(data);
     }
+
 
     public void dispose() {
 
@@ -115,27 +122,31 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     }
 
 
-    private void consume(StoredTestEvent event) {
-        try {
-            CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
-                    .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()));
+    void storeEvent(StoredTestEvent event) throws IOException {
+        CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
+                .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()));
 
-            futuresToComplete.put(result, event);
-            result.whenCompleteAsync((unused, ex) -> {
-                if (ex != null) {
-                    if (LOGGER.isErrorEnabled())
-                        LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
-                    eventBatchQueue.offer(event);
+        futuresToComplete.put(result, event);
+        result.whenCompleteAsync((unused, ex) -> {
+            if (ex != null) {
+                if (LOGGER.isErrorEnabled())
+                    LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
+                addToQueue(event);
+            }
+            if (futuresToComplete.remove(result) == null) {
+                if (LOGGER.isWarnEnabled()) {
+                    LOGGER.warn("Future related to the batch id '{}' is already removed from map", event.getId());
                 }
-                if (futuresToComplete.remove(result) == null) {
-                    if (LOGGER.isWarnEnabled()) {
-                        LOGGER.warn("Future related to the batch id '{}' is already removed from map", event.getId());
-                    }
-                }
-            });
-        } catch (Exception ex) {
-            LOGGER.error("Exception storing event batch", ex);
-            eventBatchQueue.add(event);
+            }
+        });
+    }
+
+
+    private void addToQueue(StoredTestEvent event) {
+        try {
+            eventBatchQueue.put(event);
+        } catch (InterruptedException e) {
+            LOGGER.error("InterruptedException while adding event to queue");
         }
     }
 }

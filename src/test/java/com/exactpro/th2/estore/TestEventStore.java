@@ -210,6 +210,31 @@ public class TestEventStore {
         assertEventAndStoredEvent(second, secondStoredEventId, eventIdToMessageIds.get(secondStoredEventId));
     }
 
+
+    @Test
+    @DisplayName("failed event is resubmitted")
+    public void testEventResubmitted() throws IOException, CradleStorageException {
+
+        doThrow(new IOException("event saving failed"))
+                .doReturn(CompletableFuture.completedFuture(null))
+                .when(storageMock).storeTestEventAsync(any());
+
+        Event event = createEvent("root");
+        eventStore.handle(deliveryOf(event));
+
+        verify(cradleObjectsFactory, times(1)).createTestEvent(any());
+        verify(cradleObjectsFactory, never()).createTestEventBatch(any());
+
+        ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
+        verify(storageMock, timeout(EVENT_PERSIST_TIMEOUT).times(1)).storeTestEventAsync(capture.capture());
+        verify(persistor, timeout(EVENT_PERSIST_TIMEOUT).times(2)).storeEvent(any());
+
+        StoredTestEventWithContent value = capture.getValue();
+        assertNotNull(value, "Captured stored root event");
+        assertStoredEvent(value, event);
+    }
+
+
     private void assertEventAndStoredEvent(Event event, StoredTestEventId capturedEventId, Collection<StoredMessageId> messageIds) {
         assertNotNull(capturedEventId);
         assertEquals(event.getId().getId(), capturedEventId.toString());
