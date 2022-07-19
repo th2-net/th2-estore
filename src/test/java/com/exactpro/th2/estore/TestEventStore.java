@@ -215,9 +215,9 @@ public class TestEventStore {
     @DisplayName("failed event is resubmitted")
     public void testEventResubmitted() throws IOException, CradleStorageException {
 
-        doThrow(new IOException("event saving failed"))
-                .doReturn(CompletableFuture.completedFuture(null))
-                .when(storageMock).storeTestEventAsync(any());
+        when(storageMock.storeTestEventAsync(any()))
+                .thenThrow(new IOException(""))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
         Event event = createEvent("root");
         eventStore.handle(deliveryOf(event));
