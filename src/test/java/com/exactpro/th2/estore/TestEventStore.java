@@ -56,7 +56,7 @@ public class TestEventStore {
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
 
-    private EventProcessor eventStore;
+    private EventProcessor eventProcessor;
     private CradleObjectsFactory cradleObjectsFactory;
 
     public TestEventStore() {
@@ -74,7 +74,7 @@ public class TestEventStore {
         persistor = spy(new EventPersistor(cradleManagerMock));
         persistor.start();
 
-        eventStore = spy(new EventProcessor(routerMock, cradleManagerMock, persistor));
+        eventProcessor = spy(new EventProcessor(routerMock, cradleManagerMock, persistor));
     }
 
     @AfterEach
@@ -85,7 +85,7 @@ public class TestEventStore {
     @Test
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws IOException {
-        eventStore.handle(deliveryOf());
+        eventProcessor.handle(deliveryOf());
         verify(storageMock, timeout(EVENT_PERSIST_TIMEOUT).times(0)).storeTestEventAsync(any());
     }
 
@@ -93,7 +93,7 @@ public class TestEventStore {
     @DisplayName("root event without message")
     public void testRootEventDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root");
-        eventStore.handle(deliveryOf(first));
+        eventProcessor.handle(deliveryOf(first));
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
@@ -110,7 +110,7 @@ public class TestEventStore {
     @DisplayName("sub-event without message")
     public void testSubEventDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root-id","sub-event");
-        eventStore.handle(deliveryOf(first));
+        eventProcessor.handle(deliveryOf(first));
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
@@ -128,7 +128,7 @@ public class TestEventStore {
     public void testMultipleSubEventsDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root-id","sub-event-first");
         Event second = createEvent("root-id","sub-event-second");
-        eventStore.handle(deliveryOf(first, second));
+        eventProcessor.handle(deliveryOf(first, second));
 
         verify(cradleObjectsFactory, times(2)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
@@ -151,7 +151,7 @@ public class TestEventStore {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first");
         Event second = createEvent(parentId,"sub-event-second");
-        eventStore.handle(deliveryOf(parentId, first, second));
+        eventProcessor.handle(deliveryOf(parentId, first, second));
 
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
@@ -168,7 +168,7 @@ public class TestEventStore {
     @DisplayName("Root event with three messages")
     public void testRootEventWithMessagesDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root", 3);
-        eventStore.handle(deliveryOf(first));
+        eventProcessor.handle(deliveryOf(first));
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
@@ -189,7 +189,7 @@ public class TestEventStore {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first", 2);
         Event second = createEvent(parentId,"sub-event-second", 2);
-        eventStore.handle(deliveryOf(parentId, first, second));
+        eventProcessor.handle(deliveryOf(parentId, first, second));
 
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
@@ -220,7 +220,7 @@ public class TestEventStore {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         Event event = createEvent("root");
-        eventStore.handle(deliveryOf(event));
+        eventProcessor.handle(deliveryOf(event));
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
