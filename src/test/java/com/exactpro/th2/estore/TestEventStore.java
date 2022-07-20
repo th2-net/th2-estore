@@ -216,7 +216,7 @@ public class TestEventStore {
     public void testEventResubmitted() throws IOException, CradleStorageException {
 
         when(storageMock.storeTestEventAsync(any()))
-                .thenThrow(new IOException(""))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         Event event = createEvent("root");
