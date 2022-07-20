@@ -38,6 +38,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private final BlockingQueue<StoredTestEvent> eventBatchQueue;
     private final Map<CompletableFuture<?>, StoredTestEvent> futuresToComplete = new ConcurrentHashMap<>();
     private volatile boolean stopped;
+    private Object signal = new Object();
 
     public EventPersistor(@NotNull CradleManager cradleManager) {
         this.eventBatchQueue = new LinkedBlockingQueue<>();
@@ -47,12 +48,23 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
     public void start() {
         this.stopped = false;
-        new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
+        synchronized (signal) {
+            try {
+                new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
+                signal.wait();
+            } catch (InterruptedException e) {
+
+            }
+        }
     }
 
 
     @Override
     public void run() {
+        synchronized (signal) {
+            signal.notifyAll();
+        }
+
         while (!stopped) {
             try {
                 StoredTestEvent event = eventBatchQueue.poll(POLL_WAIT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
