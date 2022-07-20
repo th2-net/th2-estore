@@ -226,8 +226,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, timeout(EVENT_PERSIST_TIMEOUT).times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, timeout(EVENT_PERSIST_TIMEOUT).times(2)).storeEvent(any());
+        verify(storageMock, after(EVENT_PERSIST_TIMEOUT * 2).times(2)).storeTestEventAsync(capture.capture());
+        verify(persistor, after(EVENT_PERSIST_TIMEOUT * 2).times(2)).storeEvent(any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
