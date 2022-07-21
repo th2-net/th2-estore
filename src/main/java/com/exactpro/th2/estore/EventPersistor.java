@@ -72,7 +72,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     try {
                         storeEvent(event);
                     } catch (IOException e) {
-                        LOGGER.error("Exception storing event with id '{}'", event.getId(), e);
+                        LOGGER.error("Exception storing event batch id '{}', rescheduling", event.getId(), e);
                         addToQueue(event);
                     }
             } catch (InterruptedException ie) {
