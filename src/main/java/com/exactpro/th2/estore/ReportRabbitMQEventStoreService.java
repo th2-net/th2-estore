@@ -85,6 +85,7 @@ public class ReportRabbitMQEventStoreService {
     public void handle(EventBatch eventBatch) {
         try {
             List<Event> events = eventBatch.getEventsList();
+            LOGGER.trace("Received EventBatch with {} events, batch hash {}", events.size(), eventBatch.hashCode());
             if (events.isEmpty()) {
                 if (LOGGER.isWarnEnabled()) {
                     LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
@@ -108,6 +109,7 @@ public class ReportRabbitMQEventStoreService {
                 }
             }
             LOGGER.trace("Number of futures: {}", futuresToComplete.size());
+            LOGGER.trace("Finished handling EventBatch with {} events, batch hash {}", events.size(), eventBatch.hashCode());
 
         } catch (CradleStorageException | IOException e) {
             if (LOGGER.isErrorEnabled()) {
