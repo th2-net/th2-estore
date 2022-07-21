@@ -216,7 +216,7 @@ public class TestEventStore {
     public void testEventResubmitted() throws IOException, CradleStorageException {
 
         when(storageMock.storeTestEventAsync(any()))
-                .thenThrow(new IOException(""))
+                .thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         Event event = createEvent("root");
@@ -226,8 +226,8 @@ public class TestEventStore {
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(storageMock, timeout(EVENT_PERSIST_TIMEOUT).times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, timeout(EVENT_PERSIST_TIMEOUT).times(2)).storeEvent(any());
+        verify(storageMock, after(EVENT_PERSIST_TIMEOUT * 2).times(2)).storeTestEventAsync(capture.capture());
+        verify(persistor, after(EVENT_PERSIST_TIMEOUT * 2).times(2)).storeEvent(any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
