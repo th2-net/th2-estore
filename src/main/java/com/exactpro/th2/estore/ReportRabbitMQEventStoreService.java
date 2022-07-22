@@ -202,7 +202,7 @@ public class ReportRabbitMQEventStoreService {
         LOGGER.trace("storeEvent() start");
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
 
-        LOGGER.debug("Storing event with id {} and parentId {}", protoEvent.getId(), protoEvent.getParentId());
+        LOGGER.debug("Storing event with id {} and parentId {}", cradleEventSingle.getId(), cradleEventSingle.getParentId());
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
                 .thenRun(() ->
                         LOGGER.debug("Stored single event id '{}' parent id '{}'",
