@@ -83,6 +83,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     public void handle(EventBatch eventBatch) {
+        LOGGER.trace("handle() start");
         try {
             List<Event> events = eventBatch.getEventsList();
             LOGGER.trace("Received EventBatch with {} events, batch hash {}", events.size(), eventBatch.hashCode());
@@ -108,9 +109,9 @@ public class ReportRabbitMQEventStoreService {
                     }
                 }
             }
+
             LOGGER.trace("Number of futures: {}", futuresToComplete.size());
             LOGGER.trace("Finished handling EventBatch with {} events, batch hash {}", events.size(), eventBatch.hashCode());
-
         } catch (CradleStorageException | IOException e) {
             if (LOGGER.isErrorEnabled()) {
                 LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
@@ -118,6 +119,7 @@ public class ReportRabbitMQEventStoreService {
             throw new RuntimeException("Failed to store event batch", e);
         }
 
+        LOGGER.trace("handle() end");
     }
 
     public void dispose() {
@@ -197,6 +199,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
+        LOGGER.trace("storeEvent() start");
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
 
         LOGGER.debug("Storing event with parentId {}", protoEvent.getId());
@@ -206,6 +209,8 @@ public class ReportRabbitMQEventStoreService {
                                 cradleEventSingle.getId(), cradleEventSingle.getParentId())
                 );
         futuresToComplete.put(result, protoEvent);
+
+        LOGGER.trace("storeEvent() end");
         return result
                 .whenCompleteAsync((unused, ex) -> {
                     if (ex != null && LOGGER.isErrorEnabled()) {
@@ -221,6 +226,7 @@ public class ReportRabbitMQEventStoreService {
     }
 
     private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
+        LOGGER.trace("storeEventBatch() start");
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
 
         LOGGER.debug("Storing batch with parentId {}", protoBatch.getParentEventId());
@@ -228,6 +234,8 @@ public class ReportRabbitMQEventStoreService {
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
                         cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
         futuresToComplete.put(result, protoBatch);
+
+        LOGGER.trace("storeEventBatch() end");
         return result
                 .whenCompleteAsync((unused, ex) -> {
                     if (ex != null && LOGGER.isErrorEnabled()) {
