@@ -47,8 +47,8 @@ public class TestEventPersistor {
 
     private static final long EVENT_PERSIST_TIMEOUT = EventPersistor.POLL_WAIT_TIMEOUT_MILLIS * 2;
 
-    private final String BOOK_NAME = "test-book";
-    private final String SCOPE = "test-scope";
+    private static final String BOOK_NAME = "test-book";
+    private static final String SCOPE = "test-scope";
 
     private final Random random = new Random();
     private final CradleStorage storageMock = mock(CradleStorage.class);
@@ -70,23 +70,57 @@ public class TestEventPersistor {
         persistor.dispose();
     }
 
+    @Test
+    @DisplayName("single event persistence")
+    public void testSingleEvent() throws IOException, CradleStorageException {
+
+        BookId bookId = new BookId(BOOK_NAME);
+        Instant timestamp = Instant.now();
+        StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
+
+        TestEventSingleToStore event = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
+
+        persistor.persist(event);
+
+        pause(EVENT_PERSIST_TIMEOUT);
+
+        ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(persistor, times(1)).storeEvent(any());
+
+        TestEventToStore value = capture.getValue();
+        assertNotNull(value, "Captured stored root event");
+        assertStoredEvent(event, value);
+    }
 
     @Test
-    @DisplayName("failed event is resubmitted")
+    @DisplayName("event batch persistence")
+    public void testEventBatch() throws IOException, CradleStorageException {
+
+        TestEventBatchToStore eventBatch = createEventBatch1();
+        persistor.persist(eventBatch);
+
+        pause(EVENT_PERSIST_TIMEOUT * 2);
+
+        ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(persistor, times(1)).storeEvent(any());
+
+        TestEventToStore value = capture.getValue();
+        assertNotNull(value, "Captured stored root event");
+        assertStoredEvent(eventBatch, value);
+    }
+
+
+    @Test
+    @DisplayName("failed event is retried")
     public void testEventResubmitted() throws IOException, CradleStorageException {
 
         when(storageMock.storeTestEventAsync(any()))
                 .thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
-        BookId bookId = new BookId(BOOK_NAME);
-        Instant timestamp = Instant.now();
-        StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
-
-        TestEventSingleToStore first = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
-        TestEventSingleToStore second = createEvent(bookId, SCOPE, parentId, "test-id-2", "test-event", timestamp, 14);
-
-        TestEventBatchToStore eventBatch = deliveryOf(bookId, SCOPE, parentId, "test-batch", timestamp, first, second);
+        TestEventBatchToStore eventBatch = createEventBatch1();
         persistor.persist(eventBatch);
 
         pause(EVENT_PERSIST_TIMEOUT * 2);
@@ -100,6 +134,18 @@ public class TestEventPersistor {
         assertStoredEvent(eventBatch, value);
     }
 
+
+    private TestEventBatchToStore createEventBatch1() throws CradleStorageException{
+
+        BookId bookId = new BookId(BOOK_NAME);
+        Instant timestamp = Instant.now();
+        StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
+
+        TestEventSingleToStore first = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
+        TestEventSingleToStore second = createEvent(bookId, SCOPE, parentId, "test-id-2", "test-event", timestamp, 14);
+
+        return deliveryOf(bookId, SCOPE, parentId, "test-batch", timestamp, first, second);
+    }
 
     private void pause(long millis) {
         try {
