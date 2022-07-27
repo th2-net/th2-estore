@@ -13,7 +13,6 @@
 
 package com.exactpro.th2.estore;
 
-import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
@@ -41,9 +40,9 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore> {
     private volatile boolean stopped;
     private final Object signal = new Object();
 
-    public EventPersistor(@NotNull CradleManager cradleManager) {
+    public EventPersistor(@NotNull CradleStorage cradleStorage) {
         this.eventBatchQueue = new LinkedBlockingQueue<>();
-        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
     }
 
 

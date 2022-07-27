@@ -15,8 +15,6 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
-import com.exactpro.cradle.CradleManager;
-import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.*;
 import com.exactpro.th2.common.grpc.*;
 import com.exactpro.th2.common.schema.message.MessageRouter;
@@ -38,11 +36,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 public class TestEventStore {
+    private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
+    private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
     private static final String ROOT_ID = "root-id";
     private static final Random RANDOM = new Random();
 
-    private final CradleManager cradleManagerMock = mock(CradleManager.class);
-    private final CradleStorage storageMock = mock(CradleStorage.class);
     @SuppressWarnings("unchecked")
     private final Persistor<TestEventToStore> persistorMock = mock(Persistor.class);
     @SuppressWarnings("unchecked")
@@ -53,10 +51,8 @@ public class TestEventStore {
 
     @BeforeEach
     void setUp()  {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
-        when(storageMock.getEntitiesFactory()).thenReturn(cradleEntitiesFactory);
-        when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        eventStore = spy(new EventProcessor(routerMock, cradleManagerMock, persistorMock));
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
+        eventStore = spy(new EventProcessor(routerMock, cradleEntitiesFactory, persistorMock));
     }
 
     @Test

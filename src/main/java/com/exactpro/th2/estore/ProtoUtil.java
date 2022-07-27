@@ -19,19 +19,15 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventId;
-import com.exactpro.cradle.testevents.TestEventSingleToStore;
-import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
-import com.exactpro.cradle.testevents.TestEventToStore;
-import com.exactpro.cradle.utils.CradleStorageException;
-import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.grpc.Event;
+import com.exactpro.th2.common.grpc.EventIDOrBuilder;
+import com.exactpro.th2.common.grpc.EventStatus;
+import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
+import com.exactpro.th2.common.util.StorageUtils;
 import com.google.protobuf.Timestamp;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.stream.Collectors;
-
-import static com.exactpro.th2.common.util.StorageUtils.toCradleDirection;
-import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 
 public class ProtoUtil {
     private static final Comparator<Timestamp> TIMESTAMP_COMPARATOR = Comparator
@@ -42,37 +38,17 @@ public class ProtoUtil {
         return new StoredMessageId(
                 new BookId(messageId.getBookName()),
                 messageId.getConnectionId().getSessionAlias(),
-                toCradleDirection(messageId.getDirection()),
-                toInstant(messageId.getTimestamp()),
+                StorageUtils.toCradleDirection(messageId.getDirection()),
+                StorageUtils.toInstant(messageId.getTimestamp()),
                 messageId.getSequence()
         );
-    }
-
-    public static TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
-        TestEventSingleToStoreBuilder builder = TestEventToStore
-                .singleBuilder()
-                .id(toCradleEventID(protoEvent.getId()))
-                .name(protoEvent.getName())
-                .type(protoEvent.getType())
-                .success(isSuccess(protoEvent.getStatus()))
-                .messages(protoEvent.getAttachedMessageIdsList().stream()
-                        .map(ProtoUtil::toStoredMessageId)
-                        .collect(Collectors.toSet()))
-                .content(protoEvent.getBody().toByteArray());
-        if (protoEvent.hasParentId()) {
-            builder.parentId(toCradleEventID(protoEvent.getParentId()));
-        }
-        if (protoEvent.hasEndTimestamp()) {
-            builder.endTimestamp(toInstant(protoEvent.getEndTimestamp()));
-        }
-        return builder.build();
     }
 
     public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID) {
         return new StoredTestEventId(
                 new BookId(protoEventID.getBookName()),
                 protoEventID.getScope(),
-                toInstant(protoEventID.getStartTimestamp()),
+                StorageUtils.toInstant(protoEventID.getStartTimestamp()),
                 String.valueOf(protoEventID.getId())
         );
     }

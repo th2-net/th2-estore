@@ -14,29 +14,30 @@
 package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.BookId;
-import com.exactpro.cradle.CradleManager;
-import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.testevents.TestEventBatchToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
+import com.exactpro.th2.common.grpc.EventOrBuilder;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
+import com.exactpro.th2.common.util.StorageUtils;
 import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.TextFormat;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
-import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static com.exactpro.th2.estore.ProtoUtil.*;
-import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
 public class EventProcessor {
@@ -44,17 +45,18 @@ public class EventProcessor {
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
     private final MessageRouter<EventBatch> router;
-    private final CradleStorage cradleStorage;
+    private final CradleEntitiesFactory entitiesFactory;
     private SubscriberMonitor monitor;
     private final Persistor<TestEventToStore> persistor;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
-                          @NotNull CradleManager cradleManager,
+                          @NotNull CradleEntitiesFactory entitiesFactory,
                           @NotNull Persistor<TestEventToStore> persistor) {
         this.router = requireNonNull(router, "Message router can't be null");
-        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle storage can't be null");
         this.persistor = persistor;
     }
+
 
     public void start() {
         if (monitor == null) {
@@ -79,7 +81,7 @@ public class EventProcessor {
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
                 if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
+                    LOGGER.warn("Skipped empty event batch " + TextFormat.shortDebugString(eventBatch));
                 }
                 return;
             }
@@ -92,7 +94,7 @@ public class EventProcessor {
                 }
             }
         } catch (Exception e) {
-            LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
+            LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
             throw new RuntimeException("Failed to store event batch", e);
         }
 
@@ -131,11 +133,11 @@ public class EventProcessor {
                 }
             } catch (CancellationException | ExecutionException e) {
                 if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("{} - storing {} object is failure", getClass().getSimpleName(), shortDebugString(object), e);
+                    LOGGER.warn("{} - storing {} object is failure", getClass().getSimpleName(), TextFormat.shortDebugString(object), e);
                 }
             } catch (TimeoutException | InterruptedException e) {
                 if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), shortDebugString(object), e);
+                    LOGGER.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), TextFormat.shortDebugString(object), e);
                 }
                 boolean mayInterruptIfRunning = e instanceof InterruptedException;
                 future.cancel(mayInterruptIfRunning);
@@ -161,16 +163,36 @@ public class EventProcessor {
         persistor.persist(cradleBatch);
     }
 
+    public TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
+        TestEventSingleToStoreBuilder builder = TestEventToStore
+                .singleBuilder()
+                .id(ProtoUtil.toCradleEventID(protoEvent.getId()))
+                .name(protoEvent.getName())
+                .type(protoEvent.getType())
+                .success(ProtoUtil.isSuccess(protoEvent.getStatus()))
+                .messages(protoEvent.getAttachedMessageIdsList().stream()
+                        .map(ProtoUtil::toStoredMessageId)
+                        .collect(Collectors.toSet()))
+                .content(protoEvent.getBody().toByteArray());
+        if (protoEvent.hasParentId()) {
+            builder.parentId(ProtoUtil.toCradleEventID(protoEvent.getParentId()));
+        }
+        if (protoEvent.hasEndTimestamp()) {
+            builder.endTimestamp(StorageUtils.toInstant(protoEvent.getEndTimestamp()));
+        }
+        return builder.build();
+    }
+
+
     private TestEventBatchToStore toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
-        TestEventBatchToStore cradleEventBatch = cradleStorage.getEntitiesFactory()
-                .testEventBatchBuilder()
+        TestEventBatchToStore cradleEventBatch = entitiesFactory.testEventBatchBuilder()
                 .id(
                         new BookId(protoEventBatch.getParentEventId().getBookName()),
                         protoEventBatch.getParentEventId().getScope(),
-                        toInstant(getMinStartTimestamp(protoEventBatch.getEventsList())),
+                        StorageUtils.toInstant(ProtoUtil.getMinStartTimestamp(protoEventBatch.getEventsList())),
                         UUID.randomUUID().toString()
                 )
-                .parentId(toCradleEventID(protoEventBatch.getParentEventId()))
+                .parentId(ProtoUtil.toCradleEventID(protoEventBatch.getParentEventId()))
                 .build();
         for (Event protoEvent : protoEventBatch.getEventsList()) {
             cradleEventBatch.addTestEvent(toCradleEvent(protoEvent));
