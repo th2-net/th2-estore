@@ -13,38 +13,12 @@
 
 package com.exactpro.th2.estore;
 
-import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static com.exactpro.th2.estore.ProtoUtil.getMinStartTimestamp;
-import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
-import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
-import static com.google.protobuf.TextFormat.shortDebugString;
-import static java.util.Objects.requireNonNull;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.TestEventBatchToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
@@ -53,19 +27,33 @@ import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.MessageOrBuilder;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class ReportRabbitMQEventStoreService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
+import java.util.*;
+import java.util.concurrent.*;
+
+import static com.exactpro.th2.common.util.StorageUtils.toInstant;
+import static com.exactpro.th2.estore.ProtoUtil.*;
+import static com.google.protobuf.TextFormat.shortDebugString;
+import static java.util.Objects.requireNonNull;
+
+public class EventProcessor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
     private final MessageRouter<EventBatch> router;
     private final CradleStorage cradleStorage;
     private SubscriberMonitor monitor;
+    private final Persistor<TestEventToStore> persistor;
 
-    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
+    public EventProcessor(@NotNull MessageRouter<EventBatch> router,
+                          @NotNull CradleManager cradleManager,
+                          @NotNull Persistor<TestEventToStore> persistor) {
         this.router = requireNonNull(router, "Message router can't be null");
-        cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.persistor = persistor;
     }
 
     public void start() {
@@ -100,10 +88,10 @@ public class ReportRabbitMQEventStoreService {
                 storeEventBatch(eventBatch);
             } else {
                 for (Event event : events) {
-                    storeEvent(event);
+                    storeSingleEvent(event);
                 }
             }
-        } catch (CradleStorageException | IOException e) {
+        } catch (Exception e) {
             LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             throw new RuntimeException("Failed to store event batch", e);
         }
@@ -132,33 +120,8 @@ public class ReportRabbitMQEventStoreService {
         } catch (Exception ex) {
             LOGGER.error("Cannot await all futures are finished", ex);
         }
-
-        LOGGER.info("Shutting down the executor");
-        try {
-            shutdownExecutor();
-            LOGGER.info("Executor shutdown");
-        } catch (Exception ex) {
-            LOGGER.error("Cannot shutdown the executor", ex);
-            if (ex instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-        }
     }
 
-    private void shutdownExecutor() throws InterruptedException {
-        executor.shutdown();
-        int timeout = 5;
-        TimeUnit unit = TimeUnit.SECONDS;
-        if (!executor.awaitTermination(timeout, unit)) {
-            if (LOGGER.isWarnEnabled()) {
-                LOGGER.warn("Executor is not terminated during the timeout: {} mls. Force shutdown", unit.toMillis(timeout));
-            }
-            List<Runnable> runnables = executor.shutdownNow();
-            if (!runnables.isEmpty()) {
-                LOGGER.warn("{} task(s) are not executed", runnables.size());
-            }
-        }
-    }
 
     private void awaitFutures(Map<CompletableFuture<?>, MessageOrBuilder> futures, Collection<CompletableFuture<?>> futuresToRemove) {
         futures.forEach((future, object) -> {
@@ -186,46 +149,16 @@ public class ReportRabbitMQEventStoreService {
         });
     }
 
-    private CompletableFuture<StoredTestEventId> storeEvent(Event protoEvent) throws IOException, CradleStorageException {
+    private void storeSingleEvent(Event protoEvent) throws Exception {
         TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent);
-        CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleEventSingle)
-                .thenRun(() ->
-                        LOGGER.debug("Stored single event id '{}' parent id '{}'",
-                                cradleEventSingle.getId(), cradleEventSingle.getParentId())
-                );
-        futuresToComplete.put(result, protoEvent);
-        return result
-                .whenCompleteAsync((unused, ex) -> {
-                    if (ex != null && LOGGER.isErrorEnabled()) {
-                        LOGGER.error("Failed to store the event '{}'", shortDebugString(protoEvent), ex);
-                    }
-                    if (futuresToComplete.remove(result) == null) {
-                        if (LOGGER.isWarnEnabled()) {
-                            LOGGER.warn("Future related to the event '{}' is already removed from map", shortDebugString(protoEvent));
-                        }
-                    }
-                }, executor)
-                .thenApply(unused -> cradleEventSingle.getId());
+        persistor.persist(cradleEventSingle);
     }
 
-    private CompletableFuture<StoredTestEventId> storeEventBatch(EventBatch protoBatch) throws IOException, CradleStorageException {
+
+    private void storeEventBatch(EventBatch protoBatch) throws Exception {
+
         TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch);
-        CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(cradleBatch)
-                .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}' size '{}'",
-                        cradleBatch.getId(), cradleBatch.getParentId(), cradleBatch.getTestEventsCount()));
-        futuresToComplete.put(result, protoBatch);
-        return result
-                .whenCompleteAsync((unused, ex) -> {
-                    if (ex != null && LOGGER.isErrorEnabled()) {
-                        LOGGER.error("Failed to store the event batch '{}'", shortDebugString(protoBatch), ex);
-                    }
-                    if (futuresToComplete.remove(result) == null) {
-                        if (LOGGER.isWarnEnabled()) {
-                            LOGGER.warn("Future related to the batch '{}' is already removed from map", shortDebugString(protoBatch));
-                        }
-                    }
-                }, executor)
-                .thenApply(unused -> cradleBatch.getId());
+        persistor.persist(cradleBatch);
     }
 
     private TestEventBatchToStore toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
