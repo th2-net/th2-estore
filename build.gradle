@@ -59,8 +59,14 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'com.exactpro.th2:common:3.39.3'
-    implementation "com.exactpro.th2:cradle-core:$cradleVersion"
-    implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
+    implementation("com.exactpro.th2:cradle-core:$cradleVersion") {
+        because('need to override common dep. remove in release')
+        force true
+    }
+    implementation("com.exactpro.th2:cradle-cassandra:$cradleVersion") {
+        because('need to override common dep. remove in release')
+        force true
+    }
 
     implementation "org.jetbrains:annotations"
 
