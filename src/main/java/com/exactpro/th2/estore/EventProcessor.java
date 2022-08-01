@@ -28,14 +28,13 @@ import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.exactpro.th2.common.util.StorageUtils;
-import com.google.protobuf.MessageOrBuilder;
 import com.google.protobuf.TextFormat;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -43,17 +42,16 @@ import static java.util.Objects.requireNonNull;
 public class EventProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
-    private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
     private final MessageRouter<EventBatch> router;
     private final CradleEntitiesFactory entitiesFactory;
-    private SubscriberMonitor monitor;
     private final Persistor<TestEventToStore> persistor;
+    private SubscriberMonitor monitor;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleEntitiesFactory entitiesFactory,
                           @NotNull Persistor<TestEventToStore> persistor) {
         this.router = requireNonNull(router, "Message router can't be null");
-        this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle storage can't be null");
+        this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle entity factory can't be null");
         this.persistor = persistor;
     }
 
@@ -108,47 +106,6 @@ public class EventProcessor {
                 LOGGER.error("Cannot unsubscribe from queues", e);
             }
         }
-
-        LOGGER.info("Waiting for futures completion");
-        try {
-            Collection<CompletableFuture<?>> futuresToRemove = new HashSet<>();
-            while (!futuresToComplete.isEmpty() && !Thread.currentThread().isInterrupted()) {
-                LOGGER.info("Wait for the completion of {} futures", futuresToComplete.size());
-                futuresToRemove.clear();
-                awaitFutures(futuresToComplete, futuresToRemove);
-                futuresToComplete.keySet().removeAll(futuresToRemove);
-            }
-            LOGGER.info("All waiting futures are completed");
-        } catch (Exception ex) {
-            LOGGER.error("Cannot await all futures are finished", ex);
-        }
-    }
-
-
-    private void awaitFutures(Map<CompletableFuture<?>, MessageOrBuilder> futures, Collection<CompletableFuture<?>> futuresToRemove) {
-        futures.forEach((future, object) -> {
-            try {
-                if (!future.isDone()) {
-                    future.get(1, TimeUnit.SECONDS);
-                }
-            } catch (CancellationException | ExecutionException e) {
-                if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("{} - storing {} object is failure", getClass().getSimpleName(), TextFormat.shortDebugString(object), e);
-                }
-            } catch (TimeoutException | InterruptedException e) {
-                if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("{} - future related to {} object can't be completed", getClass().getSimpleName(), TextFormat.shortDebugString(object), e);
-                }
-                boolean mayInterruptIfRunning = e instanceof InterruptedException;
-                future.cancel(mayInterruptIfRunning);
-
-                if (mayInterruptIfRunning) {
-                    Thread.currentThread().interrupt();
-                }
-            } finally {
-                futuresToRemove.add(future);
-            }
-        });
     }
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
