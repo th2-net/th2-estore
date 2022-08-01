@@ -51,8 +51,8 @@ import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.MessageOrBuilder;
 
-public class ReportRabbitMQEventStoreService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReportRabbitMQEventStoreService.class);
+public class EventProcessor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Map<CompletableFuture<?>, MessageOrBuilder> futuresToComplete = new ConcurrentHashMap<>();
@@ -60,7 +60,7 @@ public class ReportRabbitMQEventStoreService {
     private final CradleStorage cradleStorage;
     private SubscriberMonitor monitor;
 
-    public ReportRabbitMQEventStoreService(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
+    public EventProcessor(@NotNull MessageRouter<EventBatch> router, @NotNull CradleManager cradleManager) {
         this.router = requireNonNull(router, "Message router can't be null");
         cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
     }

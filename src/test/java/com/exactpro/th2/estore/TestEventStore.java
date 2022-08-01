@@ -74,7 +74,7 @@ public class TestEventStore {
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
 
-    private ReportRabbitMQEventStoreService eventStore;
+    private EventProcessor eventStore;
     private CradleObjectsFactory cradleObjectsFactory;
 
     @BeforeEach
@@ -84,7 +84,7 @@ public class TestEventStore {
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock));
+        eventStore = spy(new EventProcessor(routerMock, cradleManagerMock));
     }
 
     @Test

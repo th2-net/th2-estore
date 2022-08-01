@@ -73,7 +73,7 @@ test {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.estore.EventStoreMain'
+    mainClassName 'com.exactpro.th2.estore.EventStore'
 }
 
 applicationName = 'service'
