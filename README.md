@@ -49,7 +49,8 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 ## 4.0.0
 
-+ Update common version from `3.35.0` to `3.36.0`
++ Update common version from `3.35.0` to `3.39.3`
+  + Fixed problem with unconfirmed deliveries 
   + Cradle version is updated from `2.21.0` to `3.1.1`
     (please, note that the new version of Cradle is not compatible with Cradle `2.*` and requires additional schema migration if you want to keep the stored data)
   + Messages' IDs that are attached to the event are stored along with event itself
