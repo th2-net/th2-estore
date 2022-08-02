@@ -43,7 +43,13 @@ public class EventStore {
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
 
-            EventProcessor store = new EventProcessor(factory.getEventBatchRouter(), cradleManager);
+            EventPersistor persistor = new EventPersistor(cradleManager.getStorage());
+            resources.add(persistor);
+            persistor.start();
+
+            EventProcessor store = new EventProcessor(factory.getEventBatchRouter(),
+                    cradleManager.getStorage().getObjectsFactory(),
+                    persistor);
             resources.add(store::dispose);
             store.start();
 
