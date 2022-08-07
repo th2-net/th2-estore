@@ -16,6 +16,10 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.StoredTestEvent;
+import com.exactpro.cradle.testevents.StoredTestEventBatch;
+import com.exactpro.cradle.testevents.StoredTestEventSingle;
+import com.exactpro.th2.estore.util.BlockingScheduledRetryableTaskQueue;
+import com.exactpro.th2.estore.util.ScheduledRetryableTask;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,29 +36,30 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
-    public static final int POLL_WAIT_TIMEOUT_MILLIS = 100;
+
+    private static final int  MAX_TASK_RETRIES = 5;
+    private static final int  MAX_TASK_COUNT = 1000;
+    private static final long MAX_TASK_SIZE = 5_000_000;
+    private static final long TASK_RETRY_SEC = 5;
 
     private final CradleStorage cradleStorage;
-    private final BlockingQueue<StoredTestEvent> eventBatchQueue;
+    private final BlockingScheduledRetryableTaskQueue<StoredTestEvent> taskQueue;
     private final Map<CompletableFuture<?>, StoredTestEvent> futuresToComplete = new ConcurrentHashMap<>();
     private volatile boolean stopped;
     private Object signal = new Object();
 
     public EventPersistor(@NotNull CradleManager cradleManager) {
-        this.eventBatchQueue = new LinkedBlockingQueue<>();
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(MAX_TASK_COUNT, MAX_TASK_SIZE,
+                (r) -> TASK_RETRY_SEC * 1_000_000_000 * (r + 1));
     }
 
 
-    public void start() {
+    public void start() throws InterruptedException {
         this.stopped = false;
         synchronized (signal) {
-            try {
-                new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
-                signal.wait();
-            } catch (InterruptedException e) {
-
-            }
+            new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
+            signal.wait();
         }
     }
 
@@ -67,24 +72,32 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         while (!stopped) {
             try {
-                StoredTestEvent event = eventBatchQueue.poll(POLL_WAIT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
-                if (event != null)
+                ScheduledRetryableTask<StoredTestEvent> task = taskQueue.awaitScheduled();
                     try {
-                        storeEvent(event);
+                        processTask(task);
                     } catch (IOException e) {
-                        LOGGER.error("Exception storing event batch id '{}', rescheduling", event.getId(), e);
-                        addToQueue(event);
+                        LOGGER.error("Exception storing event batch id '{}', rescheduling", task.getPayload().getId(), e);
+                        taskQueue.retry(task);
                     }
             } catch (InterruptedException ie) {
-                LOGGER.debug("Received InterruptedException. Ignoring");
+                LOGGER.debug("Received InterruptedException. aborting");
+                break;
             }
         }
     }
 
 
     @Override
-    public void persist(StoredTestEvent data) {
-        addToQueue(data);
+    public void persist(StoredTestEvent event) {
+        final long size;
+        if (event instanceof StoredTestEventSingle) {
+            size = ((StoredTestEventSingle) event).getContent().length;
+        } else if (event instanceof StoredTestEventBatch) {
+            size = ((StoredTestEventBatch) event).getBatchSize();
+        } else
+            throw new IllegalArgumentException(String.format("Unknown data class ({})", event.getClass().getSimpleName()));
+
+        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), MAX_TASK_RETRIES, size, event));
     }
 
 
@@ -134,31 +147,31 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     }
 
 
-    void storeEvent(StoredTestEvent event) throws IOException {
+    void processTask(ScheduledRetryableTask<StoredTestEvent> task) throws IOException {
+
+        StoredTestEvent event = task.getPayload();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()));
 
         futuresToComplete.put(result, event);
         result.whenCompleteAsync((unused, ex) -> {
             if (ex != null) {
-                if (LOGGER.isErrorEnabled())
+                if (task.getRetriesLeft() > 0) {
                     LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
-                addToQueue(event);
-            }
+                    taskQueue.retry(task);
+                } else {
+                    taskQueue.complete(task);
+                    LOGGER.error("Failed to store the event batch id '{}', stopped retrying after {} executions",
+                            event.getId(), task.getRetriesDone() + 1, ex);
+                }
+            } else
+                taskQueue.complete(task);
+
             if (futuresToComplete.remove(result) == null) {
                 if (LOGGER.isWarnEnabled()) {
                     LOGGER.warn("Future related to the batch id '{}' is already removed from map", event.getId());
                 }
             }
         });
-    }
-
-
-    private void addToQueue(StoredTestEvent event) {
-        try {
-            eventBatchQueue.put(event);
-        } catch (InterruptedException e) {
-            LOGGER.error("InterruptedException while adding event to queue");
-        }
     }
 }

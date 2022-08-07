@@ -48,7 +48,7 @@ import static org.mockito.Mockito.*;
 
 public class TestEventStore {
 
-    private static final long EVENT_PERSIST_TIMEOUT = EventPersistor.POLL_WAIT_TIMEOUT_MILLIS * 2;
+    private static final long EVENT_PERSIST_TIMEOUT = 10;
     private final Random random = new Random();
     private final CradleManager cradleManagerMock;
     private final CradleStorage storageMock;
@@ -65,7 +65,7 @@ public class TestEventStore {
     }
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() throws IOException, InterruptedException {
         cradleObjectsFactory = spy(new CradleObjectsFactory(StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE, StoredMessageBatch.DEFAULT_MAX_BATCH_SIZE));
         when(storageMock.getObjectsFactory()).thenReturn(cradleObjectsFactory);
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
@@ -249,7 +249,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(2)).storeEvent(any());
+        verify(persistor, times(2)).processTask(any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
