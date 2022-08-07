@@ -20,7 +20,7 @@ public interface RetryScheduler {
     /**
      * Calculates delay time when next retry should be scheduled relative to current time
      *
-     * @param retriesDone   number of retries already done
+     * @param retriesDone   number of times that task has already executed
      *
      * @return Delay time in nanoseconds
      */
