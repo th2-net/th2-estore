@@ -19,6 +19,7 @@ import com.exactpro.cradle.testevents.StoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
 import com.exactpro.th2.estore.util.BlockingScheduledRetryableTaskQueue;
+import com.exactpro.th2.estore.util.RetryScheduler;
 import com.exactpro.th2.estore.util.ScheduledRetryableTask;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -49,11 +50,13 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private Object signal = new Object();
 
     public EventPersistor(@NotNull CradleManager cradleManager) {
-        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
-        this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(MAX_TASK_COUNT, MAX_TASK_SIZE,
-                (r) -> TASK_RETRY_SEC * 1_000_000_000 * (r + 1));
+        this(cradleManager, (r) -> TASK_RETRY_SEC * 1_000_000_000 * (r + 1));
     }
 
+    public EventPersistor(@NotNull CradleManager cradleManager, RetryScheduler scheduler) {
+        this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
+        this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(MAX_TASK_COUNT, MAX_TASK_SIZE, scheduler);
+    }
 
     public void start() throws InterruptedException {
         this.stopped = false;
