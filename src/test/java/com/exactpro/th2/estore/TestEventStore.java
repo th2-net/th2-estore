@@ -103,10 +103,11 @@ public class TestEventStore {
         Event first = createEvent("root");
         eventProcessor.handle(deliveryOf(first));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
-        //pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
@@ -122,10 +123,10 @@ public class TestEventStore {
         Event first = createEvent("root-id","sub-event");
         eventProcessor.handle(deliveryOf(first));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
-
-       // pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
@@ -142,10 +143,10 @@ public class TestEventStore {
         Event second = createEvent("root-id","sub-event-second");
         eventProcessor.handle(deliveryOf(first, second));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, times(2)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
-
-        //pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
@@ -167,10 +168,10 @@ public class TestEventStore {
         Event second = createEvent(parentId,"sub-event-second");
         eventProcessor.handle(deliveryOf(parentId, first, second));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
-
-        // pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
@@ -186,10 +187,10 @@ public class TestEventStore {
         Event first = createEvent("root", 3);
         eventProcessor.handle(deliveryOf(first));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
-
-        // pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
@@ -209,10 +210,11 @@ public class TestEventStore {
         Event second = createEvent(parentId,"sub-event-second", 2);
         eventProcessor.handle(deliveryOf(parentId, first, second));
 
+        pause(EVENT_PERSIST_TIMEOUT);
+
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
 
-        // pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
@@ -242,10 +244,10 @@ public class TestEventStore {
         Event event = createEvent("root");
         eventProcessor.handle(deliveryOf(event));
 
+        pause(EVENT_PERSIST_TIMEOUT * 2);
+
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
-
-        pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
