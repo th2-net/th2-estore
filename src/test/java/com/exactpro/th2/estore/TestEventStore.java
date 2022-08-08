@@ -71,7 +71,8 @@ public class TestEventStore {
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
         when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        persistor = spy(new EventPersistor(cradleManagerMock, (r) -> 1_000_000 * 50));
+        Configuration config = new Configuration(16, 1, 10L, 1_000_000L);
+        persistor = spy(new EventPersistor(config, cradleManagerMock, (r) -> 1_000_000L * config.getRetryDelayBase()));
         persistor.start();
 
         eventProcessor = spy(new EventProcessor(routerMock, cradleManagerMock, persistor));

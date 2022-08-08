@@ -38,24 +38,21 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
 
-    private static final int  MAX_TASK_RETRIES = 5;
-    private static final int  MAX_TASK_COUNT = 1000;
-    private static final long MAX_TASK_SIZE = 5_000_000;
-    private static final long TASK_RETRY_SEC = 5;
-
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<StoredTestEvent> taskQueue;
     private final Map<CompletableFuture<?>, StoredTestEvent> futuresToComplete = new ConcurrentHashMap<>();
     private volatile boolean stopped;
     private Object signal = new Object();
+    private final int maxTaskRetries;
 
-    public EventPersistor(@NotNull CradleManager cradleManager) {
-        this(cradleManager, (r) -> TASK_RETRY_SEC * 1_000_000_000 * (r + 1));
+    public EventPersistor(Configuration config, @NotNull CradleManager cradleManager) {
+        this(config, cradleManager, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
 
-    public EventPersistor(@NotNull CradleManager cradleManager, RetryScheduler scheduler) {
+    public EventPersistor(Configuration config, @NotNull CradleManager cradleManager, RetryScheduler scheduler) {
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
-        this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(MAX_TASK_COUNT, MAX_TASK_SIZE, scheduler);
+        this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
+        this.maxTaskRetries = config.getMaxRetryCount();
     }
 
     public void start() throws InterruptedException {
@@ -73,6 +70,8 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
             signal.notifyAll();
         }
 
+        LOGGER.info("EventProcessor started. Maximum data size for tasks = {}, maximum number of tasks = {}",
+                taskQueue.getMaxDataSize(), taskQueue.getMaxTaskCount());
         while (!stopped) {
             try {
                 ScheduledRetryableTask<StoredTestEvent> task = taskQueue.awaitScheduled();
@@ -100,7 +99,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         } else
             throw new IllegalArgumentException(String.format("Unknown data class ({})", event.getClass().getSimpleName()));
 
-        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), MAX_TASK_RETRIES, size, event));
+        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, size, event));
     }
 
 
