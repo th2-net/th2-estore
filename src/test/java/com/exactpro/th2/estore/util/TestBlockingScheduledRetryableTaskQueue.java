@@ -88,14 +88,14 @@ public class TestBlockingScheduledRetryableTaskQueue {
         BlockingScheduledRetryableTaskQueue<Object> queue = new BlockingScheduledRetryableTaskQueue<>(2, Long.MAX_VALUE, null);
 
         final int taskCount = 10;
-        StartableRunnable producer = StartableRunnable.of(() -> {
+        StartableRunnable fastProducer = StartableRunnable.of(() -> {
             for (int i = 0; i < taskCount; i++) {
                 queue.submit(new ScheduledRetryableTask<>(System.nanoTime(), 0, i * 10, null));
                 pause(1);
             }
         });
 
-        StartableRunnable consumer = StartableRunnable.of(() -> {
+        StartableRunnable slowConsumer = StartableRunnable.of(() -> {
             for (int i = 0; i < taskCount; i++) {
                 try {
                     ScheduledRetryableTask<Object> task = queue.awaitScheduled();
@@ -107,18 +107,18 @@ public class TestBlockingScheduledRetryableTaskQueue {
             }
         });
 
-        Thread producerThread = new Thread(producer);
-        Thread consumerThread = new Thread(consumer);
+        Thread producerThread = new Thread(fastProducer);
+        Thread consumerThread = new Thread(slowConsumer);
 
         producerThread.start();
         consumerThread.start();
 
-        producer.awaitReadiness();
-        consumer.awaitReadiness();
+        fastProducer.awaitReadiness();
+        slowConsumer.awaitReadiness();
 
-        consumer.start();
+        slowConsumer.start();
         pause(50);
-        producer.start();
+        fastProducer.start();
 
         producerThread.join();
         consumerThread.join();
@@ -133,14 +133,14 @@ public class TestBlockingScheduledRetryableTaskQueue {
         BlockingScheduledRetryableTaskQueue<Object> queue = new BlockingScheduledRetryableTaskQueue<>(Integer.MAX_VALUE, 100, null);
 
         final int taskCount = 10;
-        StartableRunnable producer = StartableRunnable.of(() -> {
+        StartableRunnable fastProducer = StartableRunnable.of(() -> {
             for (int i = 0; i < taskCount; i++) {
                 queue.submit(new ScheduledRetryableTask<>(System.nanoTime(), i, 80, null));
                 pause(1);
             }
         });
 
-        StartableRunnable consumer = StartableRunnable.of(() -> {
+        StartableRunnable slowConsumer = StartableRunnable.of(() -> {
             for (int i = 0; i < taskCount; i++) {
                 try {
                     ScheduledRetryableTask<Object> task = queue.awaitScheduled();
@@ -152,18 +152,18 @@ public class TestBlockingScheduledRetryableTaskQueue {
             }
         });
 
-        Thread producerThread = new Thread(producer);
-        Thread consumerThread = new Thread(consumer);
+        Thread producerThread = new Thread(fastProducer);
+        Thread consumerThread = new Thread(slowConsumer);
 
         producerThread.start();
         consumerThread.start();
 
-        producer.awaitReadiness();
-        consumer.awaitReadiness();
+        fastProducer.awaitReadiness();
+        slowConsumer.awaitReadiness();
 
-        consumer.start();
+        slowConsumer.start();
         pause(50);
-        producer.start();
+        fastProducer.start();
 
         producerThread.join();
         consumerThread.join();
