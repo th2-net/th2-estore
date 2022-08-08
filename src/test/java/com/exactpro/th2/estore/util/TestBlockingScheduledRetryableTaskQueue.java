@@ -14,6 +14,7 @@
  */
 
 package com.exactpro.th2.estore.util;
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,5 +81,102 @@ public class TestBlockingScheduledRetryableTaskQueue {
         assertEquals(task1, queue.take());
         assertEquals(task2, queue.take());
         assertEquals(task3, queue.take());
+    }
+
+    @Test
+    public void testBlockingByCount() throws InterruptedException {
+        BlockingScheduledRetryableTaskQueue<Object> queue = new BlockingScheduledRetryableTaskQueue<>(2, Long.MAX_VALUE, null);
+
+        final int taskCount = 10;
+        StartableRunnable producer = StartableRunnable.of(() -> {
+            for (int i = 0; i < taskCount; i++) {
+                queue.submit(new ScheduledRetryableTask<>(System.nanoTime(), 0, i * 10, null));
+                pause(1);
+            }
+        });
+
+        StartableRunnable consumer = StartableRunnable.of(() -> {
+            for (int i = 0; i < taskCount; i++) {
+                try {
+                    ScheduledRetryableTask<Object> task = queue.awaitScheduled();
+                    assertEquals(i * 10, task.getPayloadSize(), "Incorrect task");
+                    pause(20);
+                    queue.complete(task);
+                } catch (InterruptedException e) {
+                }
+            }
+        });
+
+        Thread producerThread = new Thread(producer);
+        Thread consumerThread = new Thread(consumer);
+
+        producerThread.start();
+        consumerThread.start();
+
+        producer.awaitReadiness();
+        consumer.awaitReadiness();
+
+        consumer.start();
+        pause(50);
+        producer.start();
+
+        producerThread.join();
+        consumerThread.join();
+
+        assertEquals(0, queue.getTaskCount(), "Task count after execution");
+        assertEquals(0, queue.getUsedDataSize(), "Data size after execution");
+    }
+
+
+    @Test
+    public void testBlockingBySize() throws InterruptedException {
+        BlockingScheduledRetryableTaskQueue<Object> queue = new BlockingScheduledRetryableTaskQueue<>(Integer.MAX_VALUE, 100, null);
+
+        final int taskCount = 10;
+        StartableRunnable producer = StartableRunnable.of(() -> {
+            for (int i = 0; i < taskCount; i++) {
+                queue.submit(new ScheduledRetryableTask<>(System.nanoTime(), i, 80, null));
+                pause(1);
+            }
+        });
+
+        StartableRunnable consumer = StartableRunnable.of(() -> {
+            for (int i = 0; i < taskCount; i++) {
+                try {
+                    ScheduledRetryableTask<Object> task = queue.awaitScheduled();
+                    assertEquals(i, task.getRetriesLeft(), "Incorrect task");
+                    pause(20);
+                    queue.complete(task);
+                } catch (InterruptedException e) {
+                }
+            }
+        });
+
+        Thread producerThread = new Thread(producer);
+        Thread consumerThread = new Thread(consumer);
+
+        producerThread.start();
+        consumerThread.start();
+
+        producer.awaitReadiness();
+        consumer.awaitReadiness();
+
+        consumer.start();
+        pause(50);
+        producer.start();
+
+        producerThread.join();
+        consumerThread.join();
+
+        assertEquals(0, queue.getTaskCount(), "Task count after execution");
+        assertEquals(0, queue.getUsedDataSize(), "Data size after execution");
+    }
+
+    private static void pause(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+
+        }
     }
 }
