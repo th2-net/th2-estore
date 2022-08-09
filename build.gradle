@@ -59,7 +59,7 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation "org.slf4j:slf4j-api:1.7.36"
-
+    implementation 'com.exactpro.th2:task-utils:1.0.0-dev-2825030242-7e4c603-SNAPSHOT'
     implementation 'com.exactpro.th2:common:3.39.3'
     implementation("com.exactpro.th2:cradle-core:$cradleVersion") {
         because('need to override common dep. remove in release')
