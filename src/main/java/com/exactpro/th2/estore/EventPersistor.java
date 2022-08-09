@@ -19,6 +19,7 @@ import com.exactpro.cradle.testevents.StoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
 import com.exactpro.th2.estore.util.BlockingScheduledRetryableTaskQueue;
+import com.exactpro.th2.estore.util.FutureTracker;
 import com.exactpro.th2.estore.util.RetryScheduler;
 import com.exactpro.th2.estore.util.ScheduledRetryableTask;
 import org.jetbrains.annotations.NotNull;
@@ -26,10 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,9 +38,9 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<StoredTestEvent> taskQueue;
-    private final Map<CompletableFuture<?>, StoredTestEvent> futuresToComplete = new ConcurrentHashMap<>();
+    private final FutureTracker<Void> futures;
     private volatile boolean stopped;
-    private Object signal = new Object();
+    private final Object signal = new Object();
     private final int maxTaskRetries;
 
     public EventPersistor(Configuration config, @NotNull CradleManager cradleManager) {
@@ -50,9 +48,10 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     }
 
     public EventPersistor(Configuration config, @NotNull CradleManager cradleManager, RetryScheduler scheduler) {
+        this.maxTaskRetries = config.getMaxRetryCount();
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
-        this.maxTaskRetries = config.getMaxRetryCount();
+        this.futures = new FutureTracker<>();
     }
 
     public void start() throws InterruptedException {
@@ -97,7 +96,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         } else if (event instanceof StoredTestEventBatch) {
             size = ((StoredTestEventBatch) event).getBatchSize();
         } else
-            throw new IllegalArgumentException(String.format("Unknown data class ({})", event.getClass().getSimpleName()));
+            throw new IllegalArgumentException(String.format("Unknown data class (%s)", event.getClass().getSimpleName()));
 
         taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, size, event));
     }
@@ -108,44 +107,11 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         LOGGER.info("Waiting for futures completion");
         try {
             stopped = true;
-            Collection<CompletableFuture<?>> futuresToRemove = new HashSet<>();
-            while (!futuresToComplete.isEmpty() && !Thread.currentThread().isInterrupted()) {
-                LOGGER.info("Wait for the completion of {} futures", futuresToComplete.size());
-                futuresToRemove.clear();
-                awaitFutures(futuresToComplete, futuresToRemove);
-                futuresToComplete.keySet().removeAll(futuresToRemove);
-            }
+            futures.awaitRemaining();
             LOGGER.info("All waiting futures are completed");
         } catch (Exception ex) {
             LOGGER.error("Cannot await all futures are finished", ex);
         }
-    }
-
-
-    private void awaitFutures(Map<CompletableFuture<?>, StoredTestEvent> futures, Collection<CompletableFuture<?>> futuresToRemove) {
-        futures.forEach((future, event) -> {
-            try {
-                if (!future.isDone()) {
-                    future.get(1, TimeUnit.SECONDS);
-                }
-            } catch (CancellationException | ExecutionException e) {
-                if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("{} - storing event with id '{}' failed", getClass().getSimpleName(), event.getId(), e);
-                }
-            } catch (TimeoutException | InterruptedException e) {
-                if (LOGGER.isErrorEnabled()) {
-                    LOGGER.error("{} - future related to event id '{}' can't be completed", getClass().getSimpleName(), event.getId(), e);
-                }
-                boolean mayInterruptIfRunning = e instanceof InterruptedException;
-                future.cancel(mayInterruptIfRunning);
-
-                if (mayInterruptIfRunning) {
-                    Thread.currentThread().interrupt();
-                }
-            } finally {
-                futuresToRemove.add(future);
-            }
-        });
     }
 
 
@@ -155,7 +121,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()));
 
-        futuresToComplete.put(result, event);
+        futures.track(result);
         result.whenCompleteAsync((unused, ex) -> {
             if (ex != null) {
                 if (task.getRetriesLeft() > 0) {
@@ -168,12 +134,6 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 }
             } else
                 taskQueue.complete(task);
-
-            if (futuresToComplete.remove(result) == null) {
-                if (LOGGER.isWarnEnabled()) {
-                    LOGGER.warn("Future related to the batch id '{}' is already removed from map", event.getId());
-                }
-            }
         });
     }
 }
