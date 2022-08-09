@@ -119,21 +119,23 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         StoredTestEvent event = task.getPayload();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
-                .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()));
+                .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
+                .whenCompleteAsync((unused, ex) ->
+                {
+                    if (ex != null) {
+                        if (task.getRetriesLeft() > 0) {
+                            LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
+                            taskQueue.retry(task);
+                        } else {
+                            taskQueue.complete(task);
+                            LOGGER.error("Failed to store the event batch id '{}', stopped retrying after {} executions",
+                                    event.getId(), task.getRetriesDone() + 1, ex);
+                        }
+                    } else
+                        taskQueue.complete(task);
+                }
+                );
 
         futures.track(result);
-        result.whenCompleteAsync((unused, ex) -> {
-            if (ex != null) {
-                if (task.getRetriesLeft() > 0) {
-                    LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
-                    taskQueue.retry(task);
-                } else {
-                    taskQueue.complete(task);
-                    LOGGER.error("Failed to store the event batch id '{}', stopped retrying after {} executions",
-                            event.getId(), task.getRetriesDone() + 1, ex);
-                }
-            } else
-                taskQueue.complete(task);
-        });
     }
 }
