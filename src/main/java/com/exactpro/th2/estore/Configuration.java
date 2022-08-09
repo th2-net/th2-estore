@@ -42,6 +42,7 @@ public class Configuration {
     }
 
     public Configuration() {
+        this(DEFAULT_MAX_TASK_COUNT, DEFAULT_MAX_TASK_RETRIES, DEFAULT_RETRY_DELAY_BASEM_S, defaultMaxDataSize());
     }
 
     public Configuration(Integer maxTaskCount, Integer maxTaskRetries, Long taskRetryDelayBase, Long maxTaskDataSize) {
@@ -52,11 +53,21 @@ public class Configuration {
 
     }
 
-    public static Configuration buildDefault() {
-        return new Configuration(DEFAULT_MAX_TASK_COUNT, DEFAULT_MAX_TASK_RETRIES, DEFAULT_RETRY_DELAY_BASEM_S, defaultMaxDataSize());
-    }
-
     private static long defaultMaxDataSize() {
         return Runtime.getRuntime().totalMemory()  / 2;
+    }
+
+    @Override
+    public String toString() {
+        String PREFIX = "  \"";
+        String SUFFIX = ",\n";
+        String SUFFIX_LAST = "\n";
+        String SEP = "\" : ";
+        return new StringBuilder("{\n")
+                .append(PREFIX).append("maxTaskCount").append(SEP).append(getMaxTaskCount()).append(SUFFIX)
+                .append(PREFIX).append("maxTaskDataSize").append(SEP).append(getMaxTaskDataSize()).append(SUFFIX)
+                .append(PREFIX).append("maxRetryCount").append(SEP).append(getMaxRetryCount()).append(SUFFIX)
+                .append(PREFIX).append("retryDelayBase").append(SEP).append(getRetryDelayBase()).append(SUFFIX_LAST)
+                .append("}").toString();
     }
 }

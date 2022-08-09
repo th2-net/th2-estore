@@ -41,7 +41,9 @@ public class EventStore {
 
             Configuration config = factory.getCustomConfiguration(Configuration.class);
             if (config == null)
-                config = Configuration.buildDefault();
+                config = new Configuration();
+
+            LOGGER.info("Effective configuration:\n{}", config);
 
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
