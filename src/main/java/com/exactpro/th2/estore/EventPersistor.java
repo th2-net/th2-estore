@@ -43,11 +43,11 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private final Object signal = new Object();
     private final int maxTaskRetries;
 
-    public EventPersistor(Configuration config, @NotNull CradleManager cradleManager) {
+    public EventPersistor(@NotNull Configuration config, @NotNull CradleManager cradleManager) {
         this(config, cradleManager, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
 
-    public EventPersistor(Configuration config, @NotNull CradleManager cradleManager, RetryScheduler scheduler) {
+    public EventPersistor(@NotNull Configuration config, @NotNull CradleManager cradleManager, RetryScheduler scheduler) {
         this.maxTaskRetries = config.getMaxRetryCount();
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
