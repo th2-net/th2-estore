@@ -77,8 +77,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     try {
                         processTask(task);
                     } catch (IOException e) {
-                        LOGGER.error("Exception storing event batch id '{}', rescheduling", task.getPayload().getId(), e);
-                        taskQueue.retry(task);
+                        logAndRetry(task, e);
                     }
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. aborting");
@@ -122,20 +121,30 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
                 {
-                    if (ex != null) {
-                        if (task.getRetriesLeft() > 0) {
-                            LOGGER.error("Failed to store the event batch id '{}', rescheduling", event.getId(), ex);
-                            taskQueue.retry(task);
-                        } else {
-                            taskQueue.complete(task);
-                            LOGGER.error("Failed to store the event batch id '{}', stopped retrying after {} executions",
-                                    event.getId(), task.getRetriesDone() + 1, ex);
-                        }
-                    } else
+                    if (ex != null)
+                        logAndRetry(task, ex);
+                    else
                         taskQueue.complete(task);
                 }
                 );
 
         futures.track(result);
+    }
+
+
+    private void logAndRetry(ScheduledRetryableTask<StoredTestEvent> task, Throwable e) {
+        if (task.getRetriesLeft() > 0) {
+            LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
+                    task.getPayload().getId(),
+                    task.getRetriesLeft(),
+                    e);
+            taskQueue.retry(task);
+        } else {
+            taskQueue.complete(task);
+            LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
+                    task.getPayload().getId(),
+                    task.getRetriesDone() + 1,
+                    e);
+        }
     }
 }
