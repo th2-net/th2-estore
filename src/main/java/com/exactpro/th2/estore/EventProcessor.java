@@ -31,6 +31,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
@@ -43,6 +46,8 @@ public class EventProcessor {
     private final MessageRouter<EventBatch> router;
     private final CradleObjectsFactory objectsFactory;
     private final Persistor<StoredTestEvent> persistor;
+    private final Metrics performanceMetrics;
+    private final ScheduledExecutorService performanceLoggerService;
     private SubscriberMonitor monitor;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
@@ -51,13 +56,24 @@ public class EventProcessor {
         this.router = requireNonNull(router, "Message router can't be null");
         this.objectsFactory = requireNonNull(objectsFactory, "Cradle entities factory can't be null");
         this.persistor = persistor;
+        this.performanceMetrics = new Metrics();
+        this.performanceLoggerService = Executors.newSingleThreadScheduledExecutor();
     }
 
     public void start() {
+        performanceLoggerService.scheduleWithFixedDelay(
+                () -> LOGGER.info("Queue processing speed is {} batches per second"
+                        , String.format("%.02f", performanceMetrics.getCurrentSpeed())),
+                0,
+                1,
+                TimeUnit.SECONDS
+        );
+
         if (monitor == null) {
             monitor = router.subscribeAll((tag, delivery) -> {
                 try {
                     handle(delivery);
+                    performanceMetrics.addValue(1);
                 } catch (Exception e) {
                     LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
                 }
@@ -80,13 +96,12 @@ public class EventProcessor {
                 return;
             }
 
-            if (eventBatch.hasParentEventId()) {
+            if (eventBatch.hasParentEventId())
                 storeEventBatch(eventBatch);
-            } else {
-                for (Event event : events) {
+            else
+                for (Event event : events)
                     storeSingleEvent(event);
-                }
-            }
+
         } catch (Exception e) {
             LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
             throw new RuntimeException("Failed to store event batch", e);
@@ -102,7 +117,13 @@ public class EventProcessor {
                 LOGGER.error("Cannot unsubscribe from queues", e);
             }
         }
+        try {
+            performanceLoggerService.shutdown();
+            performanceLoggerService.awaitTermination(1, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+        }
     }
+
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
         StoredTestEventSingle cradleEventSingle = objectsFactory.createTestEvent(toCradleEvent(protoEvent));

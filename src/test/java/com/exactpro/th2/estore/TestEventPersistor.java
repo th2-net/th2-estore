@@ -52,11 +52,12 @@ public class TestEventPersistor {
     private CradleObjectsFactory cradleObjectsFactory;
 
     @BeforeEach
-    void setUp() throws IOException {
+    void setUp() throws IOException, InterruptedException {
         cradleObjectsFactory = spy(new CradleObjectsFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
-        persistor = spy(new EventPersistor(storageMock));
+        Configuration config = new Configuration(16, 1, 10L, 1_000_000L);
+        persistor = spy(new EventPersistor(config, storageMock));
         persistor.start();
     }
 
@@ -80,7 +81,7 @@ public class TestEventPersistor {
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(1)).storeEvent(any());
+        verify(persistor, times(1)).processTask(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -98,7 +99,7 @@ public class TestEventPersistor {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(1)).storeEvent(any());
+        verify(persistor, times(1)).processTask(any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -121,7 +122,7 @@ public class TestEventPersistor {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(2)).storeEvent(any());
+        verify(persistor, times(2)).processTask(any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");

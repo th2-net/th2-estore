@@ -40,10 +40,16 @@ public class EventStore {
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
 
+            Configuration config = factory.getCustomConfiguration(Configuration.class);
+            if (config == null)
+                config = new Configuration();
+
+            LOGGER.info("Effective configuration:\n{}", config);
+
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
 
-            EventPersistor persistor = new EventPersistor(cradleManager.getStorage());
+            EventPersistor persistor = new EventPersistor(config, cradleManager.getStorage());
             resources.add(persistor);
             persistor.start();
 
