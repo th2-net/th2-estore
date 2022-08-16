@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-public class TestEventStore {
+public class TestEventProcessor {
 
     private final Random random = new Random();
     @SuppressWarnings("unchecked")

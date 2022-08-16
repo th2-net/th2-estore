@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.stubbing.OngoingStubbing;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +44,8 @@ public class TestEventPersistor {
     private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
     private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
 
-    private static final long EVENT_PERSIST_TIMEOUT = EventPersistor.POLL_WAIT_TIMEOUT_MILLIS * 2;
+    private static final long EVENT_PERSIST_TIMEOUT = 100;
+    private static final int EVENT_PERSIST_RETRIES = 2;
 
     private final Random random = new Random();
     private final CradleStorage storageMock = mock(CradleStorage.class);
@@ -56,7 +58,7 @@ public class TestEventPersistor {
         cradleObjectsFactory = spy(new CradleObjectsFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
-        Configuration config = new Configuration(16, 1, 10L, 1_000_000L);
+        Configuration config = new Configuration(16, EVENT_PERSIST_RETRIES, 10L, 1_000_000L);
         persistor = spy(new EventPersistor(config, storageMock));
         persistor.start();
     }
@@ -121,8 +123,32 @@ public class TestEventPersistor {
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
-        verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
         verify(persistor, times(2)).processTask(any());
+        verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+
+        StoredTestEventBatch value = capture.getValue();
+        assertNotNull(value, "Captured stored root event");
+        assertStoredEventBatch(eventBatch, value);
+    }
+
+
+    @Test
+    @DisplayName("failed event is retried limited times")
+    public void testEventResubmittedLimitedTimes() throws IOException, CradleStorageException {
+
+        OngoingStubbing<CompletableFuture<Void>> os = when(storageMock.storeTestEventAsync(any()));
+        for (int i = 0; i <= EVENT_PERSIST_RETRIES; i++)
+            os = os.thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")));
+        os.thenReturn(CompletableFuture.completedFuture(null));
+
+        StoredTestEventBatch eventBatch = createEventBatch1();
+        persistor.persist(eventBatch);
+
+        pause(EVENT_PERSIST_TIMEOUT * (EVENT_PERSIST_RETRIES + 1));
+
+        ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
+        verify(persistor, times(EVENT_PERSIST_RETRIES + 1)).processTask(any());
+        verify(storageMock, times(EVENT_PERSIST_RETRIES + 1)).storeTestEventAsync(capture.capture());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");

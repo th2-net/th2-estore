@@ -34,7 +34,6 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
-    public static final int POLL_WAIT_TIMEOUT_MILLIS = 100;
 
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<StoredTestEvent> taskQueue;
