@@ -24,9 +24,9 @@ import com.exactpro.cradle.CradleManager;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 
-public class EventStoreMain {
+public class EventStore {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(EventStoreMain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventStore.class);
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
@@ -36,14 +36,31 @@ public class EventStoreMain {
         configureShutdownHook(resources, lock, condition);
         try {
             CommonMetrics.LIVENESS_MONITOR.enable();
+
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
+
+            Configuration config = factory.getCustomConfiguration(Configuration.class);
+            if (config == null)
+                config = new Configuration();
+
+            LOGGER.info("Effective configuration:\n{}", config);
+
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager::dispose);
-            ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
+
+            EventPersistor persistor = new EventPersistor(config, cradleManager.getStorage());
+            resources.add(persistor);
+            persistor.start();
+
+            EventProcessor store = new EventProcessor(factory.getEventBatchRouter(),
+                    cradleManager.getStorage().getObjectsFactory(),
+                    persistor);
             resources.add(store::dispose);
             store.start();
+
             CommonMetrics.READINESS_MONITOR.enable();
+
             LOGGER.info("Event storing started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {
