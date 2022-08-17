@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -40,18 +40,27 @@ public class EventStore {
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
 
+            Configuration config = factory.getCustomConfiguration(Configuration.class);
+            if (config == null)
+                config = new Configuration();
+
+            LOGGER.info("Effective configuration:\n{}", config);
+
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager);
 
-            EventPersistor persistor = new EventPersistor(cradleManager.getStorage());
-            resources.add(persistor::dispose);
+            EventPersistor persistor = new EventPersistor(config, cradleManager.getStorage());
+            resources.add(persistor);
             persistor.start();
 
-            EventProcessor store = new EventProcessor(factory.getEventBatchRouter(), cradleManager.getStorage().getEntitiesFactory(), persistor);
-            resources.add(store::dispose);
+            EventProcessor processor = new EventProcessor(factory.getEventBatchRouter(),
+                    cradleManager.getStorage().getEntitiesFactory(),
+                    persistor);
+            resources.add(processor);
+            processor.start();
 
-            store.start();
             CommonMetrics.READINESS_MONITOR.enable();
+
             LOGGER.info("Event storing started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {

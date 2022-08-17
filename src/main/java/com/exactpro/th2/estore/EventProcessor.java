@@ -35,16 +35,21 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
-public class EventProcessor {
+public class EventProcessor implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final MessageRouter<EventBatch> router;
     private final CradleEntitiesFactory entitiesFactory;
     private final Persistor<TestEventToStore> persistor;
+    private final Metrics performanceMetrics;
+    private final ScheduledExecutorService performanceLoggerService;
     private SubscriberMonitor monitor;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
@@ -53,10 +58,20 @@ public class EventProcessor {
         this.router = requireNonNull(router, "Message router can't be null");
         this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle entity factory can't be null");
         this.persistor = persistor;
+        this.performanceMetrics = new Metrics();
+        this.performanceLoggerService = Executors.newSingleThreadScheduledExecutor();
     }
 
 
     public void start() {
+        performanceLoggerService.scheduleWithFixedDelay(
+                () -> LOGGER.info("Queue processing speed is {} batches per second"
+                        , String.format("%.02f", performanceMetrics.getCurrentSpeed())),
+                0,
+                1,
+                TimeUnit.SECONDS
+        );
+
         if (monitor == null) {
             monitor = router.subscribeAll((tag, delivery) -> {
                 try {
@@ -84,13 +99,12 @@ public class EventProcessor {
                 return;
             }
 
-            if (eventBatch.hasParentEventId()) {
+            if (eventBatch.hasParentEventId())
                 storeEventBatch(eventBatch);
-            } else {
-                for (Event event : events) {
+            else
+                for (Event event : events)
                     storeSingleEvent(event);
-                }
-            }
+
         } catch (Exception e) {
             LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
             throw new RuntimeException("Failed to store event batch", e);
@@ -98,13 +112,18 @@ public class EventProcessor {
 
     }
 
-    public void dispose() {
+    public void close () {
         if (monitor != null) {
             try {
                 monitor.unsubscribe();
             } catch (Exception e) {
                 LOGGER.error("Cannot unsubscribe from queues", e);
             }
+        }
+        try {
+            performanceLoggerService.shutdown();
+            performanceLoggerService.awaitTermination(1, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
         }
     }
 

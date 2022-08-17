@@ -42,10 +42,14 @@ import static org.mockito.Mockito.*;
 
 public class TestEventPersistor {
 
-    private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
-    private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
+    private static final int  MAX_MESSAGE_BATCH_SIZE      = 16 * 1024;
+    private static final int  MAX_TEST_EVENT_BATCH_SIZE   = 16 * 1024;
 
-    private static final long EVENT_PERSIST_TIMEOUT = EventPersistor.POLL_WAIT_TIMEOUT_MILLIS * 2;
+    private static final long EVENT_PERSIST_TIMEOUT       = 100;
+
+    private static final int  MAX_EVENT_PERSIST_RETRIES   = 2;
+    private static final int  MAX_EVENT_QUEUE_TASK_SIZE   = 8;
+    private static final long MAX_EVENT_QUEUE_DATA_SIZE   = 10_000L;
 
     private static final String BOOK_NAME = "test-book";
     private static final String SCOPE = "test-scope";
@@ -57,17 +61,19 @@ public class TestEventPersistor {
     private CradleEntitiesFactory cradleEntitiesFactory;
 
     @BeforeEach
-    void setUp() throws CradleStorageException, IOException {
+    void setUp() throws CradleStorageException, IOException, InterruptedException {
         cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
-        persistor = spy(new EventPersistor(storageMock));
+        Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, MAX_EVENT_QUEUE_DATA_SIZE);
+        persistor = spy(new EventPersistor(config, storageMock));
         persistor.start();
     }
 
     @AfterEach
     void dispose() {
-        persistor.dispose();
+        persistor.close();
+        reset(storageMock);
     }
 
     @Test
@@ -86,7 +92,7 @@ public class TestEventPersistor {
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(1)).storeEvent(any());
+        verify(persistor, times(1)).processTask(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -104,7 +110,7 @@ public class TestEventPersistor {
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(1)).storeEvent(any());
+        verify(persistor, times(1)).processTask(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -126,8 +132,8 @@ public class TestEventPersistor {
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
+        verify(persistor, times(2)).processTask(any());
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(persistor, times(2)).storeEvent(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
