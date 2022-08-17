@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-public class TestEventStore {
+public class TestEventProcessor {
     private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
     private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
     private static final String ROOT_ID = "root-id";
