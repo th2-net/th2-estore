@@ -20,11 +20,13 @@ import com.exactpro.cradle.Direction;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.*;
 import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.th2.taskutils.StartableRunnable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.stubbing.OngoingStubbing;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -34,6 +36,9 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -85,14 +90,13 @@ public class TestEventPersistor {
         StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
 
         TestEventSingleToStore event = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
-
         persistor.persist(event);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
         verify(persistor, times(1)).processTask(any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -109,8 +113,8 @@ public class TestEventPersistor {
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
         verify(persistor, times(1)).processTask(any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -140,6 +144,110 @@ public class TestEventPersistor {
         assertStoredEvent(eventBatch, value);
     }
 
+    @Test
+    @DisplayName("failed event is retried limited times")
+    public void testEventResubmittedLimitedTimes() throws IOException, CradleStorageException {
+
+        OngoingStubbing<CompletableFuture<Void>> os = when(storageMock.storeTestEventAsync(any()));
+        for (int i = 0; i <= MAX_EVENT_PERSIST_RETRIES; i++)
+            os = os.thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")));
+        os.thenReturn(CompletableFuture.completedFuture(null));
+
+        TestEventToStore eventBatch = createEventBatch1();
+        persistor.persist(eventBatch);
+
+        pause(EVENT_PERSIST_TIMEOUT * (MAX_EVENT_PERSIST_RETRIES + 1));
+
+        ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
+        verify(persistor, times(MAX_EVENT_PERSIST_RETRIES + 1)).processTask(any());
+        verify(storageMock, times(MAX_EVENT_PERSIST_RETRIES + 1)).storeTestEventAsync(capture.capture());
+
+        TestEventToStore value = capture.getValue();
+        assertNotNull(value, "Captured stored root event");
+        assertStoredEvent(eventBatch, value);
+    }
+
+
+    @Test
+    @DisplayName("Event persistence is queued by count")
+    public void testEventCountQueueing() throws IOException, CradleStorageException, InterruptedException {
+
+        final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
+        final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 5;
+
+        final int totalEvents = MAX_EVENT_QUEUE_TASK_SIZE + 3;
+
+        // create executor with thread pool size > event queue size to avoid free thread waiting
+        final ExecutorService executor = Executors.newFixedThreadPool(MAX_EVENT_QUEUE_TASK_SIZE * 2);
+
+        TestEventToStore eventBatch = createEventBatch1();
+
+        when(storageMock.storeTestEventAsync(any()))
+                .thenAnswer((ignored) ->  CompletableFuture.runAsync(() -> pause(storeExecutionTime), executor));
+
+        // setup producer thread
+        StartableRunnable runnable = StartableRunnable.of(() -> {
+            for (int i = 0; i < totalEvents; i++)
+                persistor.persist(eventBatch);
+        });
+
+        new Thread(runnable).start();
+        runnable.awaitReadiness();
+        runnable.start();
+
+        verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(MAX_EVENT_QUEUE_TASK_SIZE)).storeTestEventAsync(any());
+        verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
+
+        executor.shutdown();
+        executor.awaitTermination(0, TimeUnit.MILLISECONDS);
+    }
+
+
+    @Test
+    @DisplayName("Event persistence is queued by event sizes")
+    public void testEventSizeQueueing() throws IOException, InterruptedException, CradleStorageException {
+
+        final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
+        final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 6;
+
+        final int totalEvents = 5;
+        final int eventCapacityInQueue = 3;
+
+        // create executor with thread pool size > event queue size to avoid free thread waiting
+        final ExecutorService executor = Executors.newFixedThreadPool(totalEvents * 2);
+
+        // create events
+        final int eventContentSize = (int) MAX_EVENT_QUEUE_DATA_SIZE / eventCapacityInQueue;
+        final byte[] content = new byte[eventContentSize];
+
+        BookId bookId = new BookId(BOOK_NAME);
+        Instant timestamp = Instant.now();
+        StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
+
+        TestEventToStore[] events = new TestEventToStore[totalEvents];
+        for (int i = 0; i < totalEvents; i++)
+            events[i] = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12, content);
+
+        when(storageMock.storeTestEventAsync(any()))
+                .thenAnswer((ignored) ->  CompletableFuture.runAsync(() -> pause(storeExecutionTime), executor));
+
+        // setup producer thread
+        StartableRunnable runnable = StartableRunnable.of(() -> {
+            for (int i = 0; i < totalEvents; i++)
+                persistor.persist(events[i]);
+        });
+
+        new Thread(runnable).start();
+        runnable.awaitReadiness();
+        runnable.start();
+
+        verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(eventCapacityInQueue)).storeTestEventAsync(any());
+        verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
+
+        executor.shutdown();
+        executor.awaitTermination(0, TimeUnit.MILLISECONDS);
+    }
+
 
     private TestEventBatchToStore createEventBatch1() throws CradleStorageException{
 
@@ -152,6 +260,7 @@ public class TestEventPersistor {
 
         return deliveryOf(bookId, SCOPE, parentId, "test-batch", timestamp, first, second);
     }
+
 
     private void pause(long millis) {
         try {
@@ -208,20 +317,22 @@ public class TestEventPersistor {
         }
     }
 
+
     private TestEventSingleToStore createEvent(BookId bookId,
                                                String scope,
                                                StoredTestEventId parentId,
                                                String id,
                                                String name,
                                                Instant timestamp,
-                                               int numberOfMessages) throws CradleStorageException {
+                                               int numberOfMessages,
+                                               byte[] content) throws CradleStorageException {
 
         TestEventSingleToStoreBuilder eventBuilder = new TestEventSingleToStoreBuilder()
                 .id(bookId, scope, timestamp, id)
                 .name(name)
                 .parentId(parentId)
                 .type("test-event_type")
-                .content(("msg-" + random.nextInt()).getBytes(StandardCharsets.UTF_8))
+                .content(content)
                 .success(true);
 
         for (int i = 0; i < numberOfMessages; i++) {
@@ -239,6 +350,23 @@ public class TestEventPersistor {
         return eventBuilder.build();
     }
 
+
+    private TestEventSingleToStore createEvent(BookId bookId,
+                                               String scope,
+                                               StoredTestEventId parentId,
+                                               String id,
+                                               String name,
+                                               Instant timestamp,
+                                               int numberOfMessages) throws CradleStorageException {
+        return createEvent(bookId,
+                            scope,
+                            parentId,
+                            id,
+                            name,
+                            timestamp,
+                            numberOfMessages,
+                            ("msg-" + random.nextInt()).getBytes(StandardCharsets.UTF_8));
+    }
 
     private TestEventBatchToStore deliveryOf(BookId bookId,
                                              String scope,
