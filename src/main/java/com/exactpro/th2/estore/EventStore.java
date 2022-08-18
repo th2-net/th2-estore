@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2021 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,21 +13,20 @@
 
 package com.exactpro.th2.estore;
 
+import com.exactpro.cradle.CradleManager;
+import com.exactpro.th2.common.metrics.CommonMetrics;
+import com.exactpro.th2.common.schema.factory.CommonFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+public class EventStore {
 
-import com.exactpro.cradle.CradleManager;
-import com.exactpro.th2.common.metrics.CommonMetrics;
-import com.exactpro.th2.common.schema.factory.CommonFactory;
-
-public class EventStoreMain {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(EventStoreMain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventStore.class);
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
@@ -36,15 +35,32 @@ public class EventStoreMain {
 
         configureShutdownHook(resources, lock, condition);
         try {
-            CommonMetrics.setLiveness(true);
+            CommonMetrics.LIVENESS_MONITOR.enable();
+
             CommonFactory factory = CommonFactory.createFromArguments(args);
             resources.add(factory);
+
+            Configuration config = factory.getCustomConfiguration(Configuration.class);
+            if (config == null)
+                config = new Configuration();
+
+            LOGGER.info("Effective configuration:\n{}", config);
+
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager);
-            ReportRabbitMQEventStoreService store = new ReportRabbitMQEventStoreService(factory.getEventBatchRouter(), cradleManager);
-            resources.add(store::dispose);
-            store.start();
-            CommonMetrics.setReadiness(true);
+
+            EventPersistor persistor = new EventPersistor(config, cradleManager.getStorage());
+            resources.add(persistor);
+            persistor.start();
+
+            EventProcessor processor = new EventProcessor(factory.getEventBatchRouter(),
+                    cradleManager.getStorage().getEntitiesFactory(),
+                    persistor);
+            resources.add(processor);
+            processor.start();
+
+            CommonMetrics.READINESS_MONITOR.enable();
+
             LOGGER.info("Event storing started");
             awaitShutdown(lock, condition);
         } catch (InterruptedException e) {
@@ -71,7 +87,7 @@ public class EventStoreMain {
             @Override
             public void run() {
                 LOGGER.info("Shutdown start");
-                CommonMetrics.setReadiness(false);
+                CommonMetrics.READINESS_MONITOR.disable();
                 try {
                     lock.lock();
                     condition.signalAll();
@@ -86,7 +102,7 @@ public class EventStoreMain {
                         LOGGER.error(e.getMessage(), e);
                     }
                 });
-                CommonMetrics.setLiveness(false);
+                CommonMetrics.LIVENESS_MONITOR.disable();
                 LOGGER.info("Shutdown end");
             }
         });

@@ -15,10 +15,7 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
-import com.exactpro.cradle.CradleManager;
-import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.*;
-import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.*;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import org.jetbrains.annotations.NotNull;
@@ -27,10 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.exactpro.th2.common.event.Event.start;
@@ -40,45 +35,43 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-public class TestEventStore {
+public class TestEventProcessor {
+    private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
+    private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
     private static final String ROOT_ID = "root-id";
     private static final Random RANDOM = new Random();
 
-    private final CradleManager cradleManagerMock = mock(CradleManager.class);
-    private final CradleStorage storageMock = mock(CradleStorage.class);
+    @SuppressWarnings("unchecked")
+    private final Persistor<TestEventToStore> persistorMock = mock(Persistor.class);
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
 
-    private ReportRabbitMQEventStoreService eventStore;
+    private EventProcessor eventStore;
     private CradleEntitiesFactory cradleEntitiesFactory;
 
     @BeforeEach
-    void setUp() throws IOException, CradleStorageException {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE, CradleStorage.DEFAULT_MAX_MESSAGE_BATCH_SIZE));
-        when(storageMock.getEntitiesFactory()).thenReturn(cradleEntitiesFactory);
-        doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
-
-        when(cradleManagerMock.getStorage()).thenReturn(storageMock);
-        eventStore = spy(new ReportRabbitMQEventStoreService(routerMock, cradleManagerMock));
+    void setUp()  {
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
+        eventStore = spy(new EventProcessor(routerMock, cradleEntitiesFactory, persistorMock));
     }
 
     @Test
     @DisplayName("Empty delivery is not stored")
-    public void testEmptyDelivery() throws IOException, CradleStorageException {
+    public void testEmptyDelivery() throws Exception {
         eventStore.handle(deliveryOf());
-        verify(storageMock, never()).storeTestEventAsync(any());
+        verify(persistorMock, never()).persist(any());
     }
 
     @Test
     @DisplayName("root event without message")
-    public void testRootEventDelivery() throws IOException, CradleStorageException {
+    public void testRootEventDelivery() throws Exception {
         Event event = start().toProto(randomBookName(), randomScope());
         eventStore.handle(deliveryOf(event));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture());
 
         TestEventSingleToStore capturedValue = capture.getValue();
         assertNotNull(capturedValue, "Captured stored root event");
@@ -87,14 +80,14 @@ public class TestEventStore {
 
     @Test
     @DisplayName("sub-event without message")
-    public void testSubEventDelivery() throws IOException, CradleStorageException {
+    public void testSubEventDelivery() throws Exception {
         Event event = start().name("sub-event").toProto(createRandomEventId());
         eventStore.handle(deliveryOf(event));
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture());
 
         TestEventSingleToStore capturedValue = capture.getValue();
         assertNotNull(capturedValue, "Captured stored sub-event");
@@ -103,7 +96,7 @@ public class TestEventStore {
 
     @Test
     @DisplayName("multiple sub-events without messages")
-    public void testMultipleSubEventsDelivery() throws IOException, CradleStorageException {
+    public void testMultipleSubEventsDelivery() throws Exception {
         EventID parentId = createRandomEventId();
         Event first = start().name("sub-event-first").toProto(parentId);
         Event second = start().name("sub-event-second").toProto(parentId);
@@ -112,7 +105,7 @@ public class TestEventStore {
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+        verify(persistorMock, times(2)).persist(capture.capture());
         List<TestEventSingleToStore> capturedValues = capture.getAllValues();
 
         TestEventSingleToStore capturedValue = capture.getAllValues().get(0);
@@ -126,7 +119,7 @@ public class TestEventStore {
 
     @Test
     @DisplayName("Event batch with two events without messages")
-    public void testEventsBatchDelivery() throws IOException, CradleStorageException {
+    public void testEventsBatchDelivery() throws Exception {
         EventID parentId = createRandomEventId();
         Event first = start().name("sub-event-first").toProto(parentId);
         Event second = start().name("sub-event-second").toProto(parentId);
@@ -135,7 +128,7 @@ public class TestEventStore {
 
     @Test
     @DisplayName("Event batch with two events in descending start time order without messages")
-    public void testEventsBatchDeliveryDescendingStartTime() throws IOException, CradleStorageException {
+    public void testEventsBatchDeliveryDescendingStartTime() throws Exception {
         EventID parentId = createRandomEventId();
         Event second = start().name("sub-event-second").toProto(parentId);
         Event first = start().name("sub-event-first").toProto(parentId);
@@ -144,7 +137,7 @@ public class TestEventStore {
 
     @Test
     @DisplayName("Event batch with two events and messages")
-    public void testEventsBatchDeliveryWithMessages() throws IOException, CradleStorageException {
+    public void testEventsBatchDeliveryWithMessages() throws Exception {
         EventID parentId = createRandomEventId();
         assertTestEventBatchToStore(
                 parentId,
@@ -163,7 +156,7 @@ public class TestEventStore {
 
     @Test
     @DisplayName("Root event with three messages")
-    public void testRootEventWithMessagesDelivery() throws IOException, CradleStorageException {
+    public void testRootEventWithMessagesDelivery() throws Exception {
         EventID parentId = createRandomEventId();
         Event first = start()
                 .messageID(createRandomMessageId(parentId))
@@ -175,18 +168,18 @@ public class TestEventStore {
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> captureEvent = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
+        verify(persistorMock, times(1)).persist(captureEvent.capture());
 
         TestEventSingleToStore capturedValue = captureEvent.getValue();
         assertNotNull(capturedValue, "Captured stored event");
         assertStoredEvent(first, capturedValue);
     }
 
-    private void assertTestEventBatchToStore(EventID parentId, Event first, Event second) throws IOException, CradleStorageException {
+    private void assertTestEventBatchToStore(EventID parentId, Event first, Event second) throws Exception {
         eventStore.handle(deliveryOf(parentId, first, second));
 
         ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture());
 
         TestEventBatchToStore testEventBatchToStore = capture.getValue();
         assertEquals(
