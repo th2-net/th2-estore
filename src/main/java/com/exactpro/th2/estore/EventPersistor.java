@@ -43,6 +43,8 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private final Object signal = new Object();
     private final int maxTaskRetries;
 
+    private final EventPersistorMetrics metrics;
+
     public EventPersistor(@NotNull Configuration config, @NotNull CradleManager cradleManager) {
         this(config, cradleManager, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
@@ -52,7 +54,9 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
+        this.metrics = new EventPersistorMetrics(taskQueue);
     }
+
 
     public void start() throws InterruptedException {
         this.stopped = false;
@@ -89,15 +93,27 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
     @Override
     public void persist(StoredTestEvent event) {
-        final long size;
-        if (event instanceof StoredTestEventSingle) {
-            size = ((StoredTestEventSingle) event).getContent().length;
-        } else if (event instanceof StoredTestEventBatch) {
-            size = ((StoredTestEventBatch) event).getBatchSize();
-        } else
-            throw new IllegalArgumentException(String.format("Unknown data class (%s)", event.getClass().getSimpleName()));
+        metrics.takeQueueMeasurements();
+        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), event));
+    }
 
-        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, size, event));
+
+    public long getEventContentSize(StoredTestEvent event) {
+        if (event instanceof StoredTestEventSingle)
+            return ((StoredTestEventSingle) event).getContent().length;
+        else if (event instanceof StoredTestEventBatch)
+            return ((StoredTestEventBatch) event).getBatchSize();
+        else
+            throw new IllegalArgumentException(String.format("Unknown event class (%s)", event.getClass().getSimpleName()));
+    }
+
+    private int getEventCount(StoredTestEvent event) {
+        if (event instanceof StoredTestEventSingle)
+            return 1;
+        else if (event instanceof StoredTestEventBatch)
+            return ((StoredTestEventBatch) event).getTestEventsCount();
+        else
+            throw new IllegalArgumentException(String.format("Unknown event class (%s)", event.getClass().getSimpleName()));
     }
 
 
@@ -116,15 +132,17 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
     void processTask(ScheduledRetryableTask<StoredTestEvent> task) throws IOException {
 
-        StoredTestEvent event = task.getPayload();
+        final StoredTestEvent event = task.getPayload();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
                 {
                     if (ex != null)
                         logAndRetry(task, ex);
-                    else
+                    else {
                         taskQueue.complete(task);
+                        metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                    }
                 }
                 );
 
