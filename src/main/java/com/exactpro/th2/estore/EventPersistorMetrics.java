@@ -25,11 +25,11 @@ public class EventPersistorMetrics {
     private static final Gauge GAUGE_QUEUE_FREE_TASK_COUNT = Gauge
             .build("persistor_queue_free_tasks", "Number of events that can be queued").register();
     private static final Gauge GAUGE_QUEUE_MAX_DATA_SIZE = Gauge
-            .build("persistor_queue_max_data_sze", "Max data size that can be queued").register();
+            .build("persistor_queue_max_data_size", "Max data size that can be queued").register();
     private static final Gauge GAUGE_QUEUE_USED_DATA_SIZE = Gauge
-            .build("persistor_queue_used_data_sze", "Data size of queued events").register();
+            .build("persistor_queue_used_data_size", "Data size of queued events").register();
     private static final Gauge GAUGE_QUEUE_FREE_DATA_SIZE = Gauge
-            .build("persistor_queue_free_data_sze", "Available data size").register();
+            .build("persistor_queue_free_data_size", "Available data size").register();
     private static final Counter COUNTER_EVENTS_PERSISTED = Counter
             .build("persistor_events_persisted", "Number of events persisted").register();
     private static final Counter COUNTER_EVENTS_SIZE_PERSISTED = Counter

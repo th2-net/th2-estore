@@ -67,7 +67,7 @@ dependencies {
         force true
     }
 
-    implementation 'io.prometheus:simpleclient:0.9.0'
+    implementation 'io.prometheus:simpleclient:0.16.0'
     implementation "org.slf4j:slf4j-api:1.7.36"
     implementation "org.jetbrains:annotations"
 
