@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,6 +47,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private final int maxTaskRetries;
 
     private final EventPersistorMetrics metrics;
+    private final ScheduledExecutorService samplerService;
 
     public EventPersistor(@NotNull Configuration config, @NotNull CradleManager cradleManager) {
         this(config, cradleManager, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
@@ -55,6 +59,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics(taskQueue);
+        this.samplerService = Executors.newSingleThreadScheduledExecutor();
     }
 
 
@@ -75,6 +80,12 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         LOGGER.info("EventProcessor started. Maximum data size for tasks = {}, maximum number of tasks = {}",
                 taskQueue.getMaxDataSize(), taskQueue.getMaxTaskCount());
+        samplerService.scheduleWithFixedDelay(
+                () -> metrics.takeQueueMeasurements(),
+                0,
+                1,
+                TimeUnit.SECONDS
+        );
         while (!stopped) {
             try {
                 ScheduledRetryableTask<StoredTestEvent> task = taskQueue.awaitScheduled();
@@ -126,6 +137,11 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
             LOGGER.info("All waiting futures are completed");
         } catch (Exception ex) {
             LOGGER.error("Cannot await all futures are finished", ex);
+        }
+        try {
+            samplerService.shutdown();
+            samplerService.awaitTermination(1, TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
         }
     }
 
