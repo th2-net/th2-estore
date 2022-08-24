@@ -18,6 +18,7 @@ package com.exactpro.th2.estore;
 import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
+import io.prometheus.client.Histogram;
 
 public class EventPersistorMetrics {
     private static final Gauge GAUGE_QUEUE_USED_TASK_COUNT = Gauge
@@ -34,6 +35,10 @@ public class EventPersistorMetrics {
             .build("persistor_events_persisted", "Number of events persisted").register();
     private static final Counter COUNTER_EVENTS_SIZE_PERSISTED = Counter
             .build("persistor_events_sizes_persisted", "Content size of events that persisted").register();
+    private static final Histogram HISTOGRAM_PERSISTENCE_LATENCY = Histogram
+            .build("persistor_persistence_latency", "Event persistence latency")
+            .buckets(10, 20, 50, 100, 200, 300, 400, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 10000)
+            .register();
 
     private final BlockingScheduledRetryableTaskQueue taskQueue;
 
@@ -64,5 +69,11 @@ public class EventPersistorMetrics {
 
         COUNTER_EVENTS_PERSISTED.inc(events);
         COUNTER_EVENTS_SIZE_PERSISTED.inc(eventSizes);
+    }
+
+
+    public Histogram.Timer startMeasuringPersistenceLatency() {
+
+        return HISTOGRAM_PERSISTENCE_LATENCY.startTimer();
     }
 }

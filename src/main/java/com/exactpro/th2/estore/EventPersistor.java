@@ -22,6 +22,7 @@ import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import com.exactpro.th2.taskutils.FutureTracker;
 import com.exactpro.th2.taskutils.RetryScheduler;
 import com.exactpro.th2.taskutils.ScheduledRetryableTask;
+import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -149,10 +150,12 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     void processTask(ScheduledRetryableTask<StoredTestEvent> task) throws IOException {
 
         final StoredTestEvent event = task.getPayload();
+        final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
                 {
+                    timer.observeDuration();
                     if (ex != null)
                         logAndRetry(task, ex);
                     else {
