@@ -23,18 +23,31 @@ import io.prometheus.client.Histogram;
 public class EventPersistorMetrics {
     private static final Gauge GAUGE_QUEUE_USED_TASK_COUNT = Gauge
             .build("persistor_queue_task_count", "Number of events queued for persistence").register();
+
     private static final Gauge GAUGE_QUEUE_FREE_TASK_COUNT = Gauge
             .build("persistor_queue_free_tasks", "Number of events that can be queued").register();
+
     private static final Gauge GAUGE_QUEUE_MAX_DATA_SIZE = Gauge
             .build("persistor_queue_max_data_size", "Max data size that can be queued").register();
+
     private static final Gauge GAUGE_QUEUE_USED_DATA_SIZE = Gauge
             .build("persistor_queue_used_data_size", "Data size of queued events").register();
+
     private static final Gauge GAUGE_QUEUE_FREE_DATA_SIZE = Gauge
             .build("persistor_queue_free_data_size", "Available data size").register();
+
     private static final Counter COUNTER_EVENTS_PERSISTED = Counter
             .build("persistor_events_persisted", "Number of events persisted").register();
+
     private static final Counter COUNTER_EVENTS_SIZE_PERSISTED = Counter
             .build("persistor_events_sizes_persisted", "Content size of events that persisted").register();
+
+    private static final Counter COUNTER_PERSISTENCE_FAILURES = Counter
+            .build("persistor_persistence_failures", "Number of event persistence failures").register();
+
+    private static final Counter COUNTER_ABORTED_PERSISTENCES = Counter
+            .build("persistor_aborted_persistences", "Number of aborted event persistences").register();
+
     private static final Histogram HISTOGRAM_PERSISTENCE_LATENCY = Histogram
             .build("persistor_persistence_latency", "Event persistence latency")
             .buckets(10, 20, 50, 100, 200, 300, 400, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 10000)
@@ -76,4 +89,20 @@ public class EventPersistorMetrics {
 
         return HISTOGRAM_PERSISTENCE_LATENCY.startTimer();
     }
+
+
+    public void registerPersistenceFailure() {
+        COUNTER_PERSISTENCE_FAILURES.inc();
+    }
+
+
+    public void registerAbortedPersistence() {
+        COUNTER_ABORTED_PERSISTENCES.inc();
+    }
+
+
+    public void registerPersistenceRetry(int retryNumber) {
+
+    }
+
 }
