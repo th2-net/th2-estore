@@ -50,7 +50,7 @@ public class EventPersistorMetrics {
 
     private static final Histogram HISTOGRAM_PERSISTENCE_LATENCY = Histogram
             .build("persistor_persistence_latency", "Event persistence latency")
-            .buckets(10, 20, 50, 100, 200, 300, 400, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 10000)
+            .buckets(0.010, 0.020, 0.050, 0.100, 0.200, 0.300, 0.400, 0.500, 1.000, 1.500, 2.000, 2.500, 3.000, 4.000, 5.000, 10.000)
             .register();
 
     private final BlockingScheduledRetryableTaskQueue taskQueue;
