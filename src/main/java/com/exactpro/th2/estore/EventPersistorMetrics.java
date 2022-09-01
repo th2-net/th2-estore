@@ -21,6 +21,9 @@ import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
 
 public class EventPersistorMetrics {
+    private static final Gauge GAUGE_QUEUE_TASK_CAPACITY = Gauge
+            .build("persistor_queue_task_capacity", "Events queue size").register();
+
     private static final Gauge GAUGE_QUEUE_USED_TASK_COUNT = Gauge
             .build("persistor_queue_task_count", "Number of events queued for persistence").register();
 
@@ -65,6 +68,7 @@ public class EventPersistorMetrics {
         int usedTasks = taskQueue.getTaskCount();
         int freeTasks = taskQueue.getMaxTaskCount() - usedTasks;
 
+        GAUGE_QUEUE_TASK_CAPACITY.set(taskQueue.getMaxTaskCount());
         GAUGE_QUEUE_USED_TASK_COUNT.set(usedTasks);
         GAUGE_QUEUE_FREE_TASK_COUNT.set(freeTasks);
 

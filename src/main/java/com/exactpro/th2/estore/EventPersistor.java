@@ -155,7 +155,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
                 {
-                    LOGGER.debug("LATENCY: {}s", timer.observeDuration()); // TODO: remove logging, keep timer handling
+                    timer.observeDuration();
                     if (ex != null)
                         logAndRetry(task, ex);
                     else {
