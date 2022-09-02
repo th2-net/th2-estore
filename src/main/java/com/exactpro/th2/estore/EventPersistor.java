@@ -172,6 +172,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private void logAndRetry(ScheduledRetryableTask<StoredTestEvent> task, Throwable e) {
 
         metrics.registerPersistenceFailure();
+        int retriesDone = task.getRetriesDone() + 1;
 
         if (task.getRetriesLeft() > 0) {
 
@@ -180,7 +181,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     task.getRetriesLeft(),
                     e);
             taskQueue.retry(task);
-            metrics.registerPersistenceRetry(task.getRetriesDone() + 1);
+            metrics.registerPersistenceRetry(retriesDone);
 
         } else {
 
@@ -188,7 +189,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
             metrics.registerAbortedPersistence();
             LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
                     task.getPayload().getId(),
-                    task.getRetriesDone() + 1,
+                    retriesDone,
                     e);
 
         }

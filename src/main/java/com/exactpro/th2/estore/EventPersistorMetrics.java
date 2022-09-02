@@ -51,6 +51,15 @@ public class EventPersistorMetrics {
     private static final Counter COUNTER_ABORTED_PERSISTENCES = Counter
             .build("persistor_aborted_persistences", "Number of aborted event persistences").register();
 
+    private static final Counter COUNTER_1ST_RETRIES = Counter
+            .build("persistor_1st_retries", "Number of primary persistence retries").register();
+
+    private static final Counter COUNTER_2ND_RETRIES = Counter
+            .build("persistor_2nd_retries", "Number of secondary persistence retries").register();
+
+    private static final Counter COUNTER_FURTHER_RETRIES = Counter
+            .build("persistor_further_retries", "Number of further persistence retries").register();
+
     private static final Histogram HISTOGRAM_PERSISTENCE_LATENCY = Histogram
             .build("persistor_persistence_latency", "Event persistence latency")
             .buckets(0.010, 0.020, 0.050, 0.100, 0.200, 0.300, 0.400, 0.500, 1.000, 1.500, 2.000, 2.500, 3.000, 4.000, 5.000, 10.000)
@@ -106,7 +115,18 @@ public class EventPersistorMetrics {
 
 
     public void registerPersistenceRetry(int retryNumber) {
-
+        switch (retryNumber) {
+            case 1:
+                COUNTER_1ST_RETRIES.inc();
+                break;
+            case 2:
+                COUNTER_2ND_RETRIES.inc();
+                break;
+            default:
+                if (retryNumber < 1)
+                    throw new IllegalArgumentException("Invalid value : " + retryNumber);
+                else
+                    COUNTER_FURTHER_RETRIES.inc();
+        }
     }
-
 }
