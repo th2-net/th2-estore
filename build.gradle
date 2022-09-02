@@ -57,7 +57,7 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
     implementation 'com.exactpro.th2:common:3.39.3'
-    implementation 'com.exactpro.th2:task-utils:0.1.1-dev-2911744673-8a30c2b-SNAPSHOT'
+    implementation 'com.exactpro.th2:task-utils:0.1.1'
     implementation("com.exactpro.th2:cradle-core:$cradleVersion") {
         because('need to override common dep. remove in release')
         force true
