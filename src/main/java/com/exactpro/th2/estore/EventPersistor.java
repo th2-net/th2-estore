@@ -82,7 +82,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
         LOGGER.info("EventProcessor started. Maximum data size for tasks = {}, maximum number of tasks = {}",
                 taskQueue.getMaxDataSize(), taskQueue.getMaxTaskCount());
         samplerService.scheduleWithFixedDelay(
-                () -> metrics.takeQueueMeasurements(),
+                metrics::takeQueueMeasurements,
                 0,
                 1,
                 TimeUnit.SECONDS

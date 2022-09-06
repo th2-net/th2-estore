@@ -26,6 +26,7 @@ import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.TextFormat;
+import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class EventProcessor {
     private final CradleObjectsFactory objectsFactory;
     private final Persistor<StoredTestEvent> persistor;
     private SubscriberMonitor monitor;
+    private final EventProcessorMetrics metrics;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleObjectsFactory objectsFactory,
@@ -51,6 +53,7 @@ public class EventProcessor {
         this.router = requireNonNull(router, "Message router can't be null");
         this.objectsFactory = requireNonNull(objectsFactory, "Cradle entities factory can't be null");
         this.persistor = persistor;
+        this.metrics = new EventProcessorMetrics();
     }
 
     public void start() {
@@ -107,13 +110,26 @@ public class EventProcessor {
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
         StoredTestEventSingle cradleEventSingle = objectsFactory.createTestEvent(toCradleEvent(protoEvent));
-        persistor.persist(cradleEventSingle);
+        persist(cradleEventSingle);
     }
 
     private void storeEventBatch(EventBatch protoBatch) throws Exception {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
-        persistor.persist(cradleBatch);
+        persist(cradleBatch);
     }
+
+
+    private void persist(StoredTestEvent data) {
+        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+        try {
+            persistor.persist(data);
+        } catch (Exception e) {
+            LOGGER.error("Persistence exception", e);
+        } finally {
+            timer.observeDuration();
+        }
+    }
+
 
     private StoredTestEventBatch toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
         StoredTestEventBatch cradleEventsBatch = objectsFactory.createTestEventBatch(TestEventBatchToStore.builder()
