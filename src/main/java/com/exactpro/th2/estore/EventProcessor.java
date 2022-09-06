@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
+import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public class EventProcessor {
     private SubscriberMonitor monitor;
     private final Persistor<StoredTestEvent> persistor;
     private final CradleStorage cradleStorage;
+    private final EventProcessorMetrics metrics;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleManager cradleManager,
@@ -49,6 +51,7 @@ public class EventProcessor {
         this.router = requireNonNull(router, "Message router can't be null");
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.persistor = persistor;
+        this.metrics = new EventProcessorMetrics();
     }
 
     public void start() {
@@ -107,7 +110,7 @@ public class EventProcessor {
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
-        persistor.persist(cradleEventSingle);
+        persist(cradleEventSingle);
     }
 
 
@@ -122,6 +125,18 @@ public class EventProcessor {
         for (Event protoEvent : protoBatch.getEventsList())
             cradleBatch.addTestEvent(toCradleEvent(protoEvent));
 
-        persistor.persist(cradleBatch);
+        persist(cradleBatch);
+    }
+
+
+    private void persist(StoredTestEvent data) throws Exception {
+        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+        try {
+            persistor.persist(data);
+        } catch (Exception e) {
+            LOGGER.error("Persistence exception", e);
+        } finally {
+            timer.observeDuration();
+        }
     }
 }
