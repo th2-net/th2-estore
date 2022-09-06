@@ -92,7 +92,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
                 ScheduledRetryableTask<StoredTestEvent> task = taskQueue.awaitScheduled();
                     try {
                         processTask(task);
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         logAndRetry(task, e);
                     }
             } catch (InterruptedException ie) {
