@@ -13,6 +13,8 @@
 
 package com.exactpro.th2.estore;
 
+import java.util.function.Consumer;
+
 public interface Persistor<E> {
-    void persist(E data) throws Exception;
+    void persist(E data, Consumer<E> callback) throws Exception;
 }

@@ -24,6 +24,7 @@ import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.StoredTestEventWithContent;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
@@ -56,6 +57,8 @@ public class TestEventStore {
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
 
+    private final Confirmation confirmation = mock(Confirmation.class);
+
     private EventProcessor eventProcessor;
     private CradleObjectsFactory cradleObjectsFactory;
 
@@ -86,8 +89,9 @@ public class TestEventStore {
     @Test
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws IOException {
-        eventProcessor.handle(deliveryOf());
+        eventProcessor.process(deliveryOf(), confirmation);
         verify(storageMock, timeout(EVENT_PERSIST_TIMEOUT).times(0)).storeTestEventAsync(any());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
     }
 
     private void pause(long millis) {
@@ -102,7 +106,7 @@ public class TestEventStore {
     @DisplayName("root event without message")
     public void testRootEventDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root");
-        eventProcessor.handle(deliveryOf(first));
+        eventProcessor.process(deliveryOf(first), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -112,6 +116,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -122,7 +127,7 @@ public class TestEventStore {
     @DisplayName("sub-event without message")
     public void testSubEventDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root-id","sub-event");
-        eventProcessor.handle(deliveryOf(first));
+        eventProcessor.process(deliveryOf(first), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -131,6 +136,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
@@ -142,7 +148,7 @@ public class TestEventStore {
     public void testMultipleSubEventsDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root-id","sub-event-first");
         Event second = createEvent("root-id","sub-event-second");
-        eventProcessor.handle(deliveryOf(first, second));
+        eventProcessor.process(deliveryOf(first, second), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -151,6 +157,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(2)).confirm();
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
@@ -167,7 +174,7 @@ public class TestEventStore {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first");
         Event second = createEvent(parentId,"sub-event-second");
-        eventProcessor.handle(deliveryOf(parentId, first, second));
+        eventProcessor.process(deliveryOf(parentId, first, second), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -176,6 +183,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored event batch");
@@ -186,7 +194,7 @@ public class TestEventStore {
     @DisplayName("Root event with three messages")
     public void testRootEventWithMessagesDelivery() throws IOException, CradleStorageException {
         Event first = createEvent("root", 3);
-        eventProcessor.handle(deliveryOf(first));
+        eventProcessor.process(deliveryOf(first), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -195,6 +203,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(1)).storeTestEventAsync(captureEvent.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventWithContent capturedEvent = captureEvent.getValue();
         assertNotNull(capturedEvent, "Captured stored event");
@@ -209,7 +218,7 @@ public class TestEventStore {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first", 2);
         Event second = createEvent(parentId,"sub-event-second", 2);
-        eventProcessor.handle(deliveryOf(parentId, first, second));
+        eventProcessor.process(deliveryOf(parentId, first, second), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
@@ -219,6 +228,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventBatch storedTestEventBatch = capture.getValue();
         assertNotNull(storedTestEventBatch, "Captured stored event batch");
@@ -243,7 +253,7 @@ public class TestEventStore {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         Event event = createEvent("root");
-        eventProcessor.handle(deliveryOf(event));
+        eventProcessor.process(deliveryOf(event), confirmation);
 
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
@@ -253,6 +263,7 @@ public class TestEventStore {
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
         verify(persistor, times(2)).processTask(any());
+        verify(confirmation, times(1)).confirm();
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
