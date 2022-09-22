@@ -29,15 +29,13 @@ import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.exactpro.th2.common.util.StorageUtils;
 import com.google.protobuf.TextFormat;
+import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
@@ -48,9 +46,8 @@ public class EventProcessor implements AutoCloseable {
     private final MessageRouter<EventBatch> router;
     private final CradleEntitiesFactory entitiesFactory;
     private final Persistor<TestEventToStore> persistor;
-    private final Metrics performanceMetrics;
-    private final ScheduledExecutorService performanceLoggerService;
     private SubscriberMonitor monitor;
+    private final EventProcessorMetrics metrics;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleEntitiesFactory entitiesFactory,
@@ -58,19 +55,11 @@ public class EventProcessor implements AutoCloseable {
         this.router = requireNonNull(router, "Message router can't be null");
         this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle entity factory can't be null");
         this.persistor = persistor;
-        this.performanceMetrics = new Metrics();
-        this.performanceLoggerService = Executors.newSingleThreadScheduledExecutor();
+        this.metrics = new EventProcessorMetrics();
     }
 
 
     public void start() {
-        performanceLoggerService.scheduleWithFixedDelay(
-                () -> LOGGER.info("Queue processing speed is {} batches per second"
-                        , String.format("%.02f", performanceMetrics.getCurrentSpeed())),
-                0,
-                1,
-                TimeUnit.SECONDS
-        );
 
         if (monitor == null) {
             monitor = router.subscribeAll((tag, delivery) -> {
@@ -120,23 +109,30 @@ public class EventProcessor implements AutoCloseable {
                 LOGGER.error("Cannot unsubscribe from queues", e);
             }
         }
-        try {
-            performanceLoggerService.shutdown();
-            performanceLoggerService.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-        }
     }
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
         TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent);
-        persistor.persist(cradleEventSingle);
+        persist(cradleEventSingle);
     }
 
 
     private void storeEventBatch(EventBatch protoBatch) throws Exception {
 
         TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch);
-        persistor.persist(cradleBatch);
+        persist(cradleBatch);
+    }
+
+
+    private void persist(TestEventToStore data) throws Exception {
+        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+        try {
+            persistor.persist(data);
+        } catch (Exception e) {
+            LOGGER.error("Persistence exception", e);
+        } finally {
+            timer.observeDuration();
+        }
     }
 
     public TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
