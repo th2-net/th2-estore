@@ -58,11 +58,12 @@ jar {
 dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
-    implementation 'com.exactpro.th2:task-utils:0.1.0'
+    implementation 'com.exactpro.th2:task-utils:0.1.1'
     implementation 'com.exactpro.th2:common:3.39.3'
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
+    implementation 'io.prometheus:simpleclient:0.9.0'
     implementation "org.slf4j:slf4j-api:1.7.36"
     implementation "org.jetbrains:annotations"
 
