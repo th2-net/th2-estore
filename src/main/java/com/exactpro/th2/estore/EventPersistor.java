@@ -158,16 +158,16 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
-                {
-                    timer.observeDuration();
-                    if (ex != null)
-                        logAndRetry(task, ex);
-                    else {
-                        taskQueue.complete(task);
-                        metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
-                        task.getPayload().callback.accept(event);
+                    {
+                        timer.observeDuration();
+                        if (ex != null)
+                            logAndRetry(task, ex);
+                        else {
+                            taskQueue.complete(task);
+                            metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                            task.getPayload().complete();
+                        }
                     }
-                }
                 );
 
         futures.track(result);
@@ -179,8 +179,8 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         metrics.registerPersistenceFailure();
         int retriesDone = task.getRetriesDone() + 1;
 
-        final PersistenceTask payload  = task.getPayload();
-        final StoredTestEvent eventBatch = payload.eventBatch;
+        final PersistenceTask persistenceTask  = task.getPayload();
+        final StoredTestEvent eventBatch = persistenceTask.eventBatch;
 
         if (task.getRetriesLeft() > 0) {
 
@@ -199,7 +199,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     eventBatch.getId(),
                     retriesDone,
                     e);
-            payload.callback.accept(eventBatch);
+            persistenceTask.complete();
         }
     }
 
@@ -211,6 +211,11 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         PersistenceTask(StoredTestEvent eventBatch, Consumer<StoredTestEvent> callback) {
             this.eventBatch = eventBatch;
             this.callback = callback;
+        }
+
+        void complete () {
+            if (callback != null)
+                callback.accept(eventBatch);
         }
     }
 }
