@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,14 +26,12 @@ import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
+import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
 import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
@@ -45,8 +45,7 @@ public class EventProcessor {
     private SubscriberMonitor monitor;
     private final Persistor<StoredTestEvent> persistor;
     private final CradleStorage cradleStorage;
-    private final Metrics performanceMetrics;
-    private final ScheduledExecutorService performanceLoggerService;
+    private final EventProcessorMetrics metrics;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleManager cradleManager,
@@ -54,24 +53,15 @@ public class EventProcessor {
         this.router = requireNonNull(router, "Message router can't be null");
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.persistor = persistor;
-        this.performanceMetrics = new Metrics();
-        this.performanceLoggerService = Executors.newSingleThreadScheduledExecutor();
+        this.metrics = new EventProcessorMetrics();
     }
 
     public void start() {
-        performanceLoggerService.scheduleWithFixedDelay(
-                () -> LOGGER.info("Queue processing speed is {} batches per second"
-                        , String.format("%.02f", performanceMetrics.getCurrentSpeed())),
-                0,
-                1,
-                TimeUnit.SECONDS
-        );
 
         if (monitor == null) {
             monitor = router.subscribeAll((tag, delivery) -> {
                 try {
                     handle(delivery);
-                    performanceMetrics.addValue(1);
                 } catch (Exception e) {
                     LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
                 }
@@ -117,17 +107,12 @@ public class EventProcessor {
                 LOGGER.error("Cannot unsubscribe from queues", e);
             }
         }
-        try {
-            performanceLoggerService.shutdown();
-            performanceLoggerService.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-        }
-    }
+     }
 
 
     private void storeSingleEvent(Event protoEvent) throws Exception {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
-        persistor.persist(cradleEventSingle);
+        persist(cradleEventSingle);
     }
 
 
@@ -142,6 +127,18 @@ public class EventProcessor {
         for (Event protoEvent : protoBatch.getEventsList())
             cradleBatch.addTestEvent(toCradleEvent(protoEvent));
 
-        persistor.persist(cradleBatch);
+        persist(cradleBatch);
+    }
+
+
+    private void persist(StoredTestEvent data) throws Exception {
+        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+        try {
+            persistor.persist(data);
+        } catch (Exception e) {
+            LOGGER.error("Persistence exception", e);
+        } finally {
+            timer.observeDuration();
+        }
     }
 }
