@@ -17,12 +17,12 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.testevents.StoredTestEvent;
-import com.exactpro.cradle.testevents.StoredTestEventBatch;
-import com.exactpro.cradle.testevents.StoredTestEventSingle;
-import com.exactpro.cradle.testevents.TestEventBatchToStore;
+import com.exactpro.cradle.testevents.*;
+import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.schema.message.ConfirmationMessageListener;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
@@ -31,14 +31,16 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
-import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
-import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
+import static com.exactpro.th2.estore.ProtoUtil.*;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
-public class EventProcessor {
+public class EventProcessor implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final MessageRouter<EventBatch> router;
@@ -46,6 +48,7 @@ public class EventProcessor {
     private final Persistor<StoredTestEvent> persistor;
     private final CradleStorage cradleStorage;
     private final EventProcessorMetrics metrics;
+    private StoredTestEvent rootEvent;
 
     public EventProcessor(@NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleManager cradleManager,
@@ -56,16 +59,24 @@ public class EventProcessor {
         this.metrics = new EventProcessorMetrics();
     }
 
-    public void start() {
+    public void start() throws Exception {
+
+        rootEvent = createRootEvent();
+        persistor.persist(rootEvent, null);
 
         if (monitor == null) {
-            monitor = router.subscribeAll((tag, delivery) -> {
-                try {
-                    handle(delivery);
-                } catch (Exception e) {
-                    LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
+            monitor = router.subscribeAllWithManualAck(new ConfirmationMessageListener<>() {
+                @Override
+                public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
+                    process(eventBatch, confirmation);
+                }
+
+                @Override
+                public void onClose() {
+                    // TODO: what?
                 }
             }, ATTRIBUTES);
+
             if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");
                 throw new RuntimeException("Cannot find queues for subscribe");
@@ -75,31 +86,35 @@ public class EventProcessor {
     }
 
 
-    public void handle(EventBatch eventBatch) {
+    public void process(EventBatch eventBatch, Confirmation confirmation) {
         try {
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
-                if (LOGGER.isWarnEnabled()) {
+                if (LOGGER.isWarnEnabled())
                     LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
-                }
+                confirm(confirmation);
                 return;
             }
 
             if (eventBatch.hasParentEventId())
-                storeEventBatch(eventBatch);
+                storeEventBatch(eventBatch, confirmation);
             else
                 for (Event event : events)
-                    storeSingleEvent(event);
+                    storeSingleEvent(event, confirmation);
         } catch (Exception e) {
-            if (LOGGER.isErrorEnabled()) {
+            if (LOGGER.isErrorEnabled())
                 LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
+            confirm(confirmation);
+            try {
+                persist(createFailureEvent(formatBatch(eventBatch)), null);
+            } catch (Exception pe) {
+                LOGGER.error("Exception creating failure event", pe);
             }
-            throw new RuntimeException("Failed to store event batch", e);
         }
-
     }
 
-    public void dispose() {
+    @Override
+    public void close() {
         if (monitor != null) {
             try {
                 monitor.unsubscribe();
@@ -110,14 +125,13 @@ public class EventProcessor {
      }
 
 
-    private void storeSingleEvent(Event protoEvent) throws Exception {
+    private void storeSingleEvent(Event protoEvent, Confirmation confirmation) throws Exception {
         StoredTestEventSingle cradleEventSingle = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(protoEvent));
-        persist(cradleEventSingle);
+        persist(cradleEventSingle, confirmation);
     }
 
 
-    private void storeEventBatch(EventBatch protoBatch) throws Exception {
-
+    private void storeEventBatch(EventBatch protoBatch, Confirmation confirmation) throws Exception {
         TestEventBatchToStore batchToStore = TestEventBatchToStore.builder()
                 .parentId(toCradleEventID(protoBatch.getParentEventId()))
                 .build();
@@ -127,18 +141,60 @@ public class EventProcessor {
         for (Event protoEvent : protoBatch.getEventsList())
             cradleBatch.addTestEvent(toCradleEvent(protoEvent));
 
-        persist(cradleBatch);
+        persist(cradleBatch, confirmation);
     }
 
+    private void confirm(Confirmation confirmation) {
+        try {
+            if (confirmation != null)
+                confirmation.confirm();
+        } catch (Exception e) {
+            LOGGER.error("Exception sending acknowledgement", e);
+        }
+    }
 
-    private void persist(StoredTestEvent data) throws Exception {
+    private void persist(StoredTestEvent data, Confirmation confirmation) {
         Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         try {
-            persistor.persist(data);
+            persistor.persist(data, (batch) -> confirm(confirmation));
         } catch (Exception e) {
             LOGGER.error("Persistence exception", e);
         } finally {
             timer.observeDuration();
         }
+    }
+
+    private StoredTestEventId createEventId() {
+        return new StoredTestEventId(UUID.randomUUID().toString());
+    }
+
+
+    private StoredTestEvent createRootEvent() throws CradleStorageException {
+
+        TestEventToStore event = TestEventToStore.builder()
+                .id(createEventId())
+                .startTimestamp(Instant.now())
+                .name("estore")
+                .type("Microservice")
+                .success(true)
+                .content("estore started".getBytes(StandardCharsets.UTF_8))
+                .build();
+
+        return cradleStorage.getObjectsFactory().createTestEvent(event);
+    }
+
+    private StoredTestEvent createFailureEvent(String eventBody) throws CradleStorageException {
+
+        TestEventToStore event = TestEventToStore.builder()
+                                                .id(createEventId())
+                                                .startTimestamp(Instant.now())
+                                                .name("cradle serialization error")
+                                                .type("Error")
+                                                .success(false)
+                                                .content(eventBody.getBytes(StandardCharsets.UTF_8))
+                                                .parentId(rootEvent.getId())
+                                                .build();
+
+        return cradleStorage.getObjectsFactory().createTestEvent(event);
     }
 }
