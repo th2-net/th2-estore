@@ -21,8 +21,8 @@ import com.exactpro.cradle.testevents.*;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.schema.message.ConfirmationMessageListener;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
+import com.exactpro.th2.common.schema.message.ManualConfirmationListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
@@ -65,7 +65,7 @@ public class EventProcessor implements AutoCloseable {
         persistor.persist(rootEvent, null);
 
         if (monitor == null) {
-            monitor = router.subscribeAllWithManualAck(new ConfirmationMessageListener<>() {
+            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
                 @Override
                 public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
                     process(eventBatch, confirmation);
