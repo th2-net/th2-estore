@@ -73,7 +73,6 @@ public class EventProcessor implements AutoCloseable {
 
                 @Override
                 public void onClose() {
-                    // TODO: what?
                 }
             }, ATTRIBUTES);
 
