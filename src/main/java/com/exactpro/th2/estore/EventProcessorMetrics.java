@@ -15,6 +15,7 @@
 
 package com.exactpro.th2.estore;
 
+import io.prometheus.client.Counter;
 import io.prometheus.client.Histogram;
 
 public class EventProcessorMetrics {
@@ -22,6 +23,13 @@ public class EventProcessorMetrics {
             .build("th2_estore_processor_persistence_latency", "Event persistence latency")
             .buckets(0.010, 0.020, 0.050, 0.100, 0.200, 0.300, 0.400, 0.500, 1.000, 1.500, 2.000, 2.500, 3.000, 4.000, 5.000, 10.000)
             .register();
+
+    private static final Counter COUNTER_FAILURES = Counter
+            .build("th2_estore_processor_failures", "Number of event processing failures").register();
+
+    public void registerFailure() {
+        COUNTER_FAILURES.inc();
+    }
 
     public Histogram.Timer startMeasuringPersistenceLatency() {
 

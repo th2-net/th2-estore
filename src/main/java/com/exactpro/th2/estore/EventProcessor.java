@@ -104,6 +104,7 @@ public class EventProcessor implements AutoCloseable {
             if (LOGGER.isErrorEnabled())
                 LOGGER.error("Failed to store event batch '{}'", shortDebugString(eventBatch), e);
             confirm(confirmation);
+            metrics.registerFailure();
             try {
                 persist(createFailureEvent(formatBatch(eventBatch)), null);
             } catch (Exception pe) {
@@ -158,6 +159,7 @@ public class EventProcessor implements AutoCloseable {
             persistor.persist(data, (batch) -> confirm(confirmation));
         } catch (Exception e) {
             LOGGER.error("Persistence exception", e);
+            metrics.registerFailure();
         } finally {
             timer.observeDuration();
         }
