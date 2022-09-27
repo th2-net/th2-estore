@@ -204,7 +204,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     }
 
 
-    class PersistenceTask {
+    static class PersistenceTask {
         final StoredTestEvent eventBatch;
         final Consumer<StoredTestEvent> callback;
 
