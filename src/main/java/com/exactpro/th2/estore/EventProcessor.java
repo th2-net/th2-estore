@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,6 +26,8 @@ import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
+import com.exactpro.th2.common.schema.message.ManualConfirmationListener;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.exactpro.th2.common.schema.message.QueueAttribute;
 import com.exactpro.th2.common.schema.message.SubscriberMonitor;
@@ -62,46 +66,50 @@ public class EventProcessor implements AutoCloseable {
     public void start() {
 
         if (monitor == null) {
-            monitor = router.subscribeAll((tag, delivery) -> {
-                try {
-                    handle(delivery);
-                } catch (Exception e) {
-                    LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
+            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
+                @Override
+                public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
+                    process(eventBatch, confirmation);
+                }
+
+                @Override
+                public void onClose() {
                 }
             }, ATTRIBUTES);
-            if (monitor != null) {
-                LOGGER.info("RabbitMQ subscribing was successful");
-            } else {
+
+            if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");
                 throw new RuntimeException("Cannot find queues for subscribe");
             }
+            LOGGER.info("RabbitMQ subscribing was successful");
         }
     }
 
-    public void handle(EventBatch eventBatch) {
+    public void process(EventBatch eventBatch, Confirmation confirmation) {
         try {
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
-                if (LOGGER.isWarnEnabled()) {
+                if (LOGGER.isWarnEnabled())
                     LOGGER.warn("Skipped empty event batch " + TextFormat.shortDebugString(eventBatch));
-                }
+                confirm(confirmation);
                 return;
             }
 
             if (eventBatch.hasParentEventId())
-                storeEventBatch(eventBatch);
+                storeEventBatch(eventBatch, confirmation);
             else
                 for (Event event : events)
-                    storeSingleEvent(event);
+                    storeSingleEvent(event, confirmation);
 
         } catch (Exception e) {
             LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
-            throw new RuntimeException("Failed to store event batch", e);
+            confirm(confirmation);
+            metrics.registerFailure();
         }
-
     }
 
-    public void close () {
+    @Override
+    public void close() {
         if (monitor != null) {
             try {
                 monitor.unsubscribe();
@@ -111,25 +119,34 @@ public class EventProcessor implements AutoCloseable {
         }
     }
 
-    private void storeSingleEvent(Event protoEvent) throws Exception {
+    private void storeSingleEvent(Event protoEvent, Confirmation confirmation) throws Exception {
         TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent);
-        persist(cradleEventSingle);
+        persist(cradleEventSingle, confirmation);
     }
 
 
-    private void storeEventBatch(EventBatch protoBatch) throws Exception {
+    private void storeEventBatch(EventBatch protoBatch, Confirmation confirmation) throws Exception {
 
         TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch);
-        persist(cradleBatch);
+        persist(cradleBatch, confirmation);
     }
 
+    private void confirm(Confirmation confirmation) {
+        try {
+            if (confirmation != null)
+                confirmation.confirm();
+        } catch (Exception e) {
+            LOGGER.error("Exception sending acknowledgement", e);
+        }
+    }
 
-    private void persist(TestEventToStore data) throws Exception {
+    private void persist(TestEventToStore data, Confirmation confirmation) {
         Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         try {
-            persistor.persist(data);
+            persistor.persist(data, (batch) -> confirm(confirmation));
         } catch (Exception e) {
             LOGGER.error("Persistence exception", e);
+            metrics.registerFailure();
         } finally {
             timer.observeDuration();
         }

@@ -17,6 +17,7 @@ import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.testevents.*;
 import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,12 +46,13 @@ public class TestEventProcessor {
     private final Persistor<TestEventToStore> persistorMock = mock(Persistor.class);
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
+    private final Confirmation confirmation = mock(Confirmation.class);
 
     private EventProcessor eventStore;
     private CradleEntitiesFactory cradleEntitiesFactory;
 
     @BeforeEach
-    void setUp()  {
+    void setUp() throws Exception {
         cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
         eventStore = spy(new EventProcessor(routerMock, cradleEntitiesFactory, persistorMock));
     }
@@ -58,20 +60,21 @@ public class TestEventProcessor {
     @Test
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws Exception {
-        eventStore.handle(deliveryOf());
-        verify(persistorMock, never()).persist(any());
+        eventStore.process(deliveryOf(), confirmation);
+        verify(persistorMock, never()).persist(any(), any());
+        verify(confirmation, times(1)).confirm();
     }
 
     @Test
     @DisplayName("root event without message")
     public void testRootEventDelivery() throws Exception {
         Event event = start().toProto(randomBookName(), randomScope());
-        eventStore.handle(deliveryOf(event));
+        eventStore.process(deliveryOf(event), confirmation);
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(persistorMock, times(1)).persist(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture(), any());
 
         TestEventSingleToStore capturedValue = capture.getValue();
         assertNotNull(capturedValue, "Captured stored root event");
@@ -82,12 +85,12 @@ public class TestEventProcessor {
     @DisplayName("sub-event without message")
     public void testSubEventDelivery() throws Exception {
         Event event = start().name("sub-event").toProto(createRandomEventId());
-        eventStore.handle(deliveryOf(event));
+        eventStore.process(deliveryOf(event), confirmation);
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(persistorMock, times(1)).persist(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture(), any());
 
         TestEventSingleToStore capturedValue = capture.getValue();
         assertNotNull(capturedValue, "Captured stored sub-event");
@@ -100,12 +103,12 @@ public class TestEventProcessor {
         EventID parentId = createRandomEventId();
         Event first = start().name("sub-event-first").toProto(parentId);
         Event second = start().name("sub-event-second").toProto(parentId);
-        eventStore.handle(deliveryOf(first, second));
+        eventStore.process(deliveryOf(first, second), confirmation);
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(persistorMock, times(2)).persist(capture.capture());
+        verify(persistorMock, times(2)).persist(capture.capture(), any());
         List<TestEventSingleToStore> capturedValues = capture.getAllValues();
 
         TestEventSingleToStore capturedValue = capture.getAllValues().get(0);
@@ -163,12 +166,12 @@ public class TestEventProcessor {
                 .messageID(createRandomMessageId(parentId))
                 .messageID(createRandomMessageId(parentId))
                 .toProto(parentId);
-        eventStore.handle(deliveryOf(first));
+        eventStore.process(deliveryOf(first), confirmation);
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
         ArgumentCaptor<TestEventSingleToStore> captureEvent = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        verify(persistorMock, times(1)).persist(captureEvent.capture());
+        verify(persistorMock, times(1)).persist(captureEvent.capture(), any());
 
         TestEventSingleToStore capturedValue = captureEvent.getValue();
         assertNotNull(capturedValue, "Captured stored event");
@@ -176,10 +179,10 @@ public class TestEventProcessor {
     }
 
     private void assertTestEventBatchToStore(EventID parentId, Event first, Event second) throws Exception {
-        eventStore.handle(deliveryOf(parentId, first, second));
+        eventStore.process(deliveryOf(parentId, first, second), confirmation);
 
         ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
-        verify(persistorMock, times(1)).persist(capture.capture());
+        verify(persistorMock, times(1)).persist(capture.capture(), any());
 
         TestEventBatchToStore testEventBatchToStore = capture.getValue();
         assertEquals(
