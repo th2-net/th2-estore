@@ -55,9 +55,9 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this(config, cradleStorage, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
 
-    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorager, RetryScheduler scheduler) {
+    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorage, RetryScheduler scheduler) {
         this.maxTaskRetries = config.getMaxRetryCount();
-        this.cradleStorage = requireNonNull(cradleStorager, "Cradle storage can't be null");
+        this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics(taskQueue);
