@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 # Prepare custom build version
     - name: Get branch name
       id: branch
@@ -31,8 +31,8 @@ jobs:
       run: echo ${{ steps.release_ver.outputs.value }}
 # Build and publish image
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-    - uses: docker/login-action@v1
+      uses: docker/setup-buildx-action@v2
+    - uses: docker/login-action@v2
       with:
         registry: ghcr.io
         username: ${{ github.repository_owner }}
