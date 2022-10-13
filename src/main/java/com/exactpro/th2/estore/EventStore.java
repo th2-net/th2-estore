@@ -56,7 +56,7 @@ public class EventStore {
             EventProcessor store = new EventProcessor(factory.getEventBatchRouter(),
                     cradleManager.getStorage().getObjectsFactory(),
                     persistor);
-            resources.add(store::dispose);
+            resources.add(store);
             store.start();
 
             CommonMetrics.READINESS_MONITOR.enable();

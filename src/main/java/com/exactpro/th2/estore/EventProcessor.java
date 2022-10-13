@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,9 +24,8 @@ import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
-import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.exactpro.th2.common.schema.message.QueueAttribute;
-import com.exactpro.th2.common.schema.message.SubscriberMonitor;
+import com.exactpro.th2.common.schema.message.*;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.google.protobuf.TextFormat;
 import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
@@ -38,7 +39,7 @@ import static com.exactpro.th2.estore.ProtoUtil.toCradleEventID;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
-public class EventProcessor {
+public class EventProcessor implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
     private final MessageRouter<EventBatch> router;
@@ -59,11 +60,14 @@ public class EventProcessor {
     public void start() {
 
         if (monitor == null) {
-            monitor = router.subscribeAll((tag, delivery) -> {
-                try {
-                    handle(delivery);
-                } catch (Exception e) {
-                    LOGGER.warn("Cannot handle delivery from consumer = {}", tag, e);
+            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
+                @Override
+                public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
+                    process(eventBatch, confirmation);
+                }
+
+                @Override
+                public void onClose() {
                 }
             }, ATTRIBUTES);
             if (monitor == null) {
@@ -75,29 +79,31 @@ public class EventProcessor {
     }
 
 
-    public void handle(EventBatch eventBatch) {
+    public void process(EventBatch eventBatch, Confirmation confirmation) {
         try {
             List<Event> events = eventBatch.getEventsList();
             if (events.isEmpty()) {
-                if (LOGGER.isWarnEnabled()) {
+                if (LOGGER.isWarnEnabled())
                     LOGGER.warn("Skipped empty event batch " + shortDebugString(eventBatch));
-                }
+                confirm(confirmation);
                 return;
             }
 
             if (eventBatch.hasParentEventId())
-                storeEventBatch(eventBatch);
+                storeEventBatch(eventBatch, confirmation);
             else
                 for (Event event : events)
-                    storeSingleEvent(event);
+                    storeSingleEvent(event, confirmation);
+
         } catch (Exception e) {
             LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
-            throw new RuntimeException("Failed to store event batch", e);
+            confirm(confirmation);
+            metrics.registerFailure();
         }
-
     }
 
-    public void dispose() {
+    @Override
+    public void close() {
         if (monitor != null) {
             try {
                 monitor.unsubscribe();
@@ -108,23 +114,32 @@ public class EventProcessor {
     }
 
 
-    private void storeSingleEvent(Event protoEvent) throws Exception {
+    private void storeSingleEvent(Event protoEvent, Confirmation confirmation) throws Exception {
         StoredTestEventSingle cradleEventSingle = objectsFactory.createTestEvent(toCradleEvent(protoEvent));
-        persist(cradleEventSingle);
+        persist(cradleEventSingle, confirmation);
     }
 
-    private void storeEventBatch(EventBatch protoBatch) throws Exception {
+    private void storeEventBatch(EventBatch protoBatch, Confirmation confirmation) throws Exception {
         StoredTestEventBatch cradleBatch = toCradleBatch(protoBatch);
-        persist(cradleBatch);
+        persist(cradleBatch, confirmation);
     }
 
+    private void confirm(Confirmation confirmation) {
+        try {
+            if (confirmation != null)
+                confirmation.confirm();
+        } catch (Exception e) {
+            LOGGER.error("Exception sending acknowledgement", e);
+        }
+    }
 
-    private void persist(StoredTestEvent data) {
+    private void persist(StoredTestEvent data, Confirmation confirmation) {
         Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         try {
-            persistor.persist(data);
+            persistor.persist(data, (batch) -> confirm(confirmation));
         } catch (Exception e) {
             LOGGER.error("Persistence exception", e);
+            metrics.registerFailure();
         } finally {
             timer.observeDuration();
         }

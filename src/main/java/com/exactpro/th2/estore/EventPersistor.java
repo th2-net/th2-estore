@@ -3,7 +3,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,7 +18,6 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.testevents.StoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
-import com.exactpro.cradle.testevents.StoredTestEventSingle;
 import com.exactpro.cradle.testevents.StoredTestEventWithContent;
 import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import com.exactpro.th2.taskutils.FutureTracker;
@@ -32,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -41,7 +43,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
 
     private final CradleStorage cradleStorage;
-    private final BlockingScheduledRetryableTaskQueue<StoredTestEvent> taskQueue;
+    private final BlockingScheduledRetryableTaskQueue<PersistenceTask> taskQueue;
     private final FutureTracker<Void> futures;
     private volatile boolean stopped;
     private final Object signal = new Object();
@@ -54,9 +56,9 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
         this(config, cradleStorage, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
 
-    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorager, RetryScheduler scheduler) {
+    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorage, RetryScheduler scheduler) {
         this.maxTaskRetries = config.getMaxRetryCount();
-        this.cradleStorage = requireNonNull(cradleStorager, "Cradle storage can't be null");
+        this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics(taskQueue);
@@ -89,7 +91,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
         );
         while (!stopped) {
             try {
-                ScheduledRetryableTask<StoredTestEvent> task = taskQueue.awaitScheduled();
+                ScheduledRetryableTask<PersistenceTask> task = taskQueue.awaitScheduled();
                     try {
                         processTask(task);
                     } catch (Exception e) {
@@ -104,9 +106,10 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
 
 
     @Override
-    public void persist(StoredTestEvent event) {
+    public void persist(StoredTestEvent event, Consumer<StoredTestEvent> callback) {
         metrics.takeQueueMeasurements();
-        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), event));
+        PersistenceTask task = new PersistenceTask(event, callback);
+        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));
     }
 
 
@@ -120,13 +123,14 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
     }
 
     private int getEventCount(StoredTestEvent event) {
-        if (event instanceof StoredTestEventSingle)
+        if (event instanceof StoredTestEventWithContent)
             return 1;
         else if (event instanceof StoredTestEventBatch)
             return ((StoredTestEventBatch) event).getTestEventsCount();
         else
             throw new IllegalArgumentException(String.format("Unknown event class (%s)", event.getClass().getSimpleName()));
     }
+
 
     public void close () {
 
@@ -146,37 +150,41 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
     }
 
 
-    void processTask(ScheduledRetryableTask<StoredTestEvent> task) throws IOException {
+    void processTask(ScheduledRetryableTask<PersistenceTask> task) throws IOException {
 
-        final StoredTestEvent event = task.getPayload();
+        final StoredTestEvent event = task.getPayload().eventBatch;
         final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
-                {
-                    timer.observeDuration();
-                    if (ex != null)
-                        logAndRetry(task, ex);
-                    else {
-                        taskQueue.complete(task);
-                        metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                    {
+                        timer.observeDuration();
+                        if (ex != null)
+                            logAndRetry(task, ex);
+                        else {
+                            taskQueue.complete(task);
+                            metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                            task.getPayload().complete();
+                        }
                     }
-                }
                 );
 
         futures.track(result);
     }
 
 
-    private void logAndRetry(ScheduledRetryableTask<StoredTestEvent> task, Throwable e) {
+    private void logAndRetry(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
 
         metrics.registerPersistenceFailure();
         int retriesDone = task.getRetriesDone() + 1;
 
+        final PersistenceTask persistenceTask  = task.getPayload();
+        final StoredTestEvent eventBatch = persistenceTask.eventBatch;
+
         if (task.getRetriesLeft() > 0) {
 
             LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
-                    task.getPayload().getId(),
+                    eventBatch.getId(),
                     task.getRetriesLeft(),
                     e);
             taskQueue.retry(task);
@@ -187,10 +195,26 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent>, Aut
             taskQueue.complete(task);
             metrics.registerAbortedPersistence();
             LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
-                    task.getPayload().getId(),
+                    eventBatch.getId(),
                     retriesDone,
                     e);
+            persistenceTask.complete();
+        }
+    }
 
+
+    static class PersistenceTask {
+        final StoredTestEvent eventBatch;
+        final Consumer<StoredTestEvent> callback;
+
+        PersistenceTask(StoredTestEvent eventBatch, Consumer<StoredTestEvent> callback) {
+            this.eventBatch = eventBatch;
+            this.callback = callback;
+        }
+
+        void complete () {
+            if (callback != null)
+                callback.accept(eventBatch);
         }
     }
 }

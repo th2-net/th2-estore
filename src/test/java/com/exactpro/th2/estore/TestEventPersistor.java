@@ -38,6 +38,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -56,6 +57,9 @@ public class TestEventPersistor {
 
     private final Random random = new Random();
     private final CradleStorage storageMock = mock(CradleStorage.class);
+
+    @SuppressWarnings("unchecked")
+    private final Consumer<StoredTestEvent> callback = mock(Consumer.class);
     private EventPersistor persistor;
 
     private CradleObjectsFactory cradleObjectsFactory;
@@ -84,14 +88,14 @@ public class TestEventPersistor {
         StoredTestEventId parentId = new StoredTestEventId("test-parent");
 
         TestEventToStore event = createEvent(parentId, "test-id-1", "test-event", timestamp, 12);
-
-        persistor.persist(event);
+        persistor.persist(event, callback);
 
         pause(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
         verify(persistor, times(1)).processTask(any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(callback, times(1)).accept(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -103,13 +107,14 @@ public class TestEventPersistor {
     public void testEventBatch() throws IOException, CradleStorageException {
 
         StoredTestEventBatch eventBatch = createEventBatch1();
-        persistor.persist(eventBatch);
+        persistor.persist(eventBatch, callback);
 
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
-        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
         verify(persistor, times(1)).processTask(any());
+        verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
+        verify(callback, times(1)).accept(any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -126,13 +131,14 @@ public class TestEventPersistor {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         StoredTestEventBatch eventBatch = createEventBatch1();
-        persistor.persist(eventBatch);
+        persistor.persist(eventBatch, callback);
 
         pause(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(persistor, times(2)).processTask(any());
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
+        verify(callback, times(1)).accept(any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -150,13 +156,14 @@ public class TestEventPersistor {
         os.thenReturn(CompletableFuture.completedFuture(null));
 
         StoredTestEventBatch eventBatch = createEventBatch1();
-        persistor.persist(eventBatch);
+        persistor.persist(eventBatch, callback);
 
         pause(EVENT_PERSIST_TIMEOUT * (MAX_EVENT_PERSIST_RETRIES + 1));
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
         verify(persistor, times(MAX_EVENT_PERSIST_RETRIES + 1)).processTask(any());
         verify(storageMock, times(MAX_EVENT_PERSIST_RETRIES + 1)).storeTestEventAsync(capture.capture());
+        verify(callback, times(1)).accept(any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -184,7 +191,7 @@ public class TestEventPersistor {
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
             for (int i = 0; i < totalEvents; i++)
-                persistor.persist(eventBatch);
+                persistor.persist(eventBatch, callback);
         });
 
         new Thread(runnable).start();
@@ -193,6 +200,7 @@ public class TestEventPersistor {
 
         verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(MAX_EVENT_QUEUE_TASK_SIZE)).storeTestEventAsync(any());
         verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
+        verify(callback, after(totalExecutionTime).times(totalEvents)).accept(any());
 
         executor.shutdown();
         executor.awaitTermination(0, TimeUnit.MILLISECONDS);
@@ -227,7 +235,7 @@ public class TestEventPersistor {
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
             for (int i = 0; i < totalEvents; i++)
-                persistor.persist(events[i]);
+                persistor.persist(events[i], callback);
         });
 
         new Thread(runnable).start();
@@ -236,6 +244,7 @@ public class TestEventPersistor {
 
         verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(eventCapacityInQueue)).storeTestEventAsync(any());
         verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
+        verify(callback, after(totalExecutionTime).times(totalEvents)).accept(any());
 
         executor.shutdown();
         executor.awaitTermination(0, TimeUnit.MILLISECONDS);

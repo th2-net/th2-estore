@@ -18,6 +18,7 @@ import com.exactpro.cradle.messages.StoredMessageBatch;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.*;
 import com.exactpro.th2.common.grpc.*;
+import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
@@ -42,6 +43,7 @@ public class TestEventProcessor {
     private final Random random = new Random();
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
+    private final ManualAckDeliveryCallback.Confirmation confirmation = mock(ManualAckDeliveryCallback.Confirmation.class);
 
     @SuppressWarnings("unchecked")
     private final Persistor<StoredTestEvent> persistor = mock(Persistor.class);
@@ -58,21 +60,22 @@ public class TestEventProcessor {
     @Test
     @DisplayName("Empty delivery is not stored")
     public void testEmptyDelivery() throws Exception {
-        eventStore.handle(deliveryOf());
-        verify(persistor, never()).persist(any());
+        eventStore.process(deliveryOf(), confirmation);
+        verify(persistor, never()).persist(any(), any());
+        verify(confirmation, times(1)).confirm();
     }
 
     @Test
     @DisplayName("root event without message")
     public void testRootEventDelivery() throws Exception {
         Event first = createEvent("root");
-        eventStore.handle(deliveryOf(first));
+        eventStore.process(deliveryOf(first), confirmation);
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(persistor, times(1)).persist(capture.capture());
+        verify(persistor, times(1)).persist(capture.capture(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -83,13 +86,13 @@ public class TestEventProcessor {
     @DisplayName("sub-event without message")
     public void testSubEventDelivery() throws Exception {
         Event first = createEvent("root-id","sub-event");
-        eventStore.handle(deliveryOf(first));
+        eventStore.process(deliveryOf(first), confirmation);
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(persistor, times(1)).persist(capture.capture());
+        verify(persistor, times(1)).persist(capture.capture(), any());
 
         StoredTestEventWithContent value = capture.getValue();
         assertNotNull(value, "Captured stored sub-event");
@@ -101,13 +104,13 @@ public class TestEventProcessor {
     public void testMultipleSubEventsDelivery() throws Exception {
         Event first = createEvent("root-id","sub-event-first");
         Event second = createEvent("root-id","sub-event-second");
-        eventStore.handle(deliveryOf(first, second));
+        eventStore.process(deliveryOf(first, second), confirmation);
 
         verify(cradleObjectsFactory, times(2)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(persistor, times(2)).persist(capture.capture());
+        verify(persistor, times(2)).persist(capture.capture(), any());
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");
@@ -124,13 +127,13 @@ public class TestEventProcessor {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first");
         Event second = createEvent(parentId,"sub-event-second");
-        eventStore.handle(deliveryOf(parentId, first, second));
+        eventStore.process(deliveryOf(parentId, first, second), confirmation);
 
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
-        verify(persistor, times(1)).persist(capture.capture());
+        verify(persistor, times(1)).persist(capture.capture(), any());
 
         StoredTestEventBatch value = capture.getValue();
         assertNotNull(value, "Captured stored event batch");
@@ -141,13 +144,13 @@ public class TestEventProcessor {
     @DisplayName("Root event with three messages")
     public void testRootEventWithMessagesDelivery() throws Exception {
         Event first = createEvent("root", 3);
-        eventStore.handle(deliveryOf(first));
+        eventStore.process(deliveryOf(first), confirmation);
 
         verify(cradleObjectsFactory, times(1)).createTestEvent(any());
         verify(cradleObjectsFactory, never()).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventWithContent> captureEvent = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
-        verify(persistor, times(1)).persist(captureEvent.capture());
+        verify(persistor, times(1)).persist(captureEvent.capture(), any());
 
         StoredTestEventWithContent capturedEvent = captureEvent.getValue();
         assertNotNull(capturedEvent, "Captured stored event");
@@ -162,13 +165,13 @@ public class TestEventProcessor {
         String parentId = "root-id";
         Event first = createEvent(parentId,"sub-event-first", 2);
         Event second = createEvent(parentId,"sub-event-second", 2);
-        eventStore.handle(deliveryOf(parentId, first, second));
+        eventStore.process(deliveryOf(parentId, first, second), confirmation);
 
         verify(cradleObjectsFactory, never()).createTestEvent(any());
         verify(cradleObjectsFactory, times(1)).createTestEventBatch(any());
 
         ArgumentCaptor<StoredTestEventBatch> capture = ArgumentCaptor.forClass(StoredTestEventBatch.class);
-        verify(persistor, times(1)).persist(capture.capture());
+        verify(persistor, times(1)).persist(capture.capture(), any());
 
         StoredTestEventBatch storedTestEventBatch = capture.getValue();
         assertNotNull(storedTestEventBatch, "Captured stored event batch");
