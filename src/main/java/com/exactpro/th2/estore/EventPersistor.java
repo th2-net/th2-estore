@@ -50,7 +50,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     private final Object signal = new Object();
     private final int maxTaskRetries;
 
-    private final EventPersistorMetrics metrics;
+    private final EventPersistorMetrics<PersistenceTask> metrics;
     private final ScheduledExecutorService samplerService;
 
     public EventPersistor(@NotNull Configuration config, @NotNull CradleManager cradleManager) {
@@ -62,7 +62,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         this.cradleStorage = requireNonNull(cradleManager.getStorage(), "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
-        this.metrics = new EventPersistorMetrics(taskQueue);
+        this.metrics = new EventPersistorMetrics<>(taskQueue);
         this.samplerService = Executors.newSingleThreadScheduledExecutor();
     }
 
@@ -160,9 +160,9 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 .whenCompleteAsync((unused, ex) ->
                     {
                         timer.observeDuration();
-                        if (ex != null)
+                        if (ex != null) {
                             logAndRetry(task, ex);
-                        else {
+                        } else {
                             taskQueue.complete(task);
                             metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
                             task.getPayload().complete();

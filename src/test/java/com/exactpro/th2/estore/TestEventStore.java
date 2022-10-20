@@ -159,7 +159,7 @@ public class TestEventStore {
 
         ArgumentCaptor<StoredTestEventWithContent> capture = ArgumentCaptor.forClass(StoredTestEventWithContent.class);
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(2)).confirm();
+        verify(confirmation, timeout(EVENT_PERSIST_TIMEOUT).times(1)).confirm();
 
         StoredTestEventWithContent value = capture.getAllValues().get(0);
         assertNotNull(value, "Captured first stored event");

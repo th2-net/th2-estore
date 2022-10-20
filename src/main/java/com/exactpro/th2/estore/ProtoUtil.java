@@ -16,6 +16,7 @@
 
 package com.exactpro.th2.estore;
 
+import java.nio.charset.StandardCharsets;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -34,13 +35,13 @@ public class ProtoUtil {
         return new StoredMessageId(messageId.getConnectionId().getSessionAlias(), toCradleDirection(messageId.getDirection()), messageId.getSequence());
     }
 
-    public static TestEventToStore toCradleEvent(EventOrBuilder protoEvent) {
+    private static TestEventToStore buildCradleEvent(EventOrBuilder protoEvent, byte[] content, boolean success) {
         TestEventToStoreBuilder builder = TestEventToStore.builder()
                 .id(toCradleEventID(protoEvent.getId()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
-                .success(isSuccess(protoEvent.getStatus()))
-                .content(protoEvent.getBody().toByteArray())
+                .success(success)
+                .content(content)
                 .messageIds(protoEvent.getAttachedMessageIdsList().stream()
                         .map(ProtoUtil::toStoredMessageId)
                         .collect(Collectors.toList())
@@ -57,6 +58,19 @@ public class ProtoUtil {
         return builder.build();
     }
 
+
+    public static TestEventToStore toCradleEvent(EventOrBuilder protoEvent) {
+        return buildCradleEvent(protoEvent, protoEvent.getBody().toByteArray(), isSuccess(protoEvent.getStatus()));
+    }
+
+    public static TestEventToStore toFailedCradleEvent(EventOrBuilder protoEvent, String message) {
+        return buildCradleEvent(protoEvent, message.getBytes(StandardCharsets.UTF_8), false);
+    }
+
+    public static String formatEvent(Event event) {
+        StringBuilder builder = new StringBuilder("EVENT");
+        return formatEvent(builder,event).toString();
+    }
 
     private static StringBuilder formatEvent(StringBuilder builder, Event event) {
 
