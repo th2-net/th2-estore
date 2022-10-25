@@ -32,7 +32,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -48,7 +47,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private final Object signal = new Object();
     private final int maxTaskRetries;
 
-    private final EventPersistorMetrics metrics;
+    private final EventPersistorMetrics<PersistenceTask> metrics;
     private final ScheduledExecutorService samplerService;
 
     public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorage) {
@@ -60,7 +59,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
-        this.metrics = new EventPersistorMetrics(taskQueue);
+        this.metrics = new EventPersistorMetrics<>(taskQueue);
         this.samplerService = Executors.newSingleThreadScheduledExecutor();
     }
 
@@ -105,7 +104,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
 
     @Override
-    public void persist(TestEventToStore event, Consumer<TestEventToStore> callback) {
+    public void persist(TestEventToStore event, Callback<TestEventToStore> callback) {
         metrics.takeQueueMeasurements();
         PersistenceTask task = new PersistenceTask(event, callback);
         taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));
@@ -158,9 +157,9 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                 .whenCompleteAsync((unused, ex) ->
                     {
                         timer.observeDuration();
-                        if (ex != null)
+                        if (ex != null) {
                             logAndRetry(task, ex);
-                        else {
+                        } else {
                             taskQueue.complete(task);
                             metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
                             task.getPayload().complete();
@@ -197,23 +196,28 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                     eventBatch.getId(),
                     retriesDone,
                     e);
-            persistenceTask.complete();
+            persistenceTask.fail();
         }
     }
 
 
     static class PersistenceTask {
         final TestEventToStore eventBatch;
-        final Consumer<TestEventToStore> callback;
+        final Callback<TestEventToStore> callback;
 
-        PersistenceTask(TestEventToStore eventBatch, Consumer<TestEventToStore> callback) {
+        PersistenceTask(TestEventToStore eventBatch, Callback<TestEventToStore> callback) {
             this.eventBatch = eventBatch;
             this.callback = callback;
         }
 
         void complete () {
             if (callback != null)
-                callback.accept(eventBatch);
+                callback.onSuccess(eventBatch);
+        }
+
+        void fail() {
+            if (callback != null)
+                callback.onFail(eventBatch);
         }
     }
 }
