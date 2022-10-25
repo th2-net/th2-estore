@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.google.protobuf.TextFormat.shortDebugString;
@@ -118,47 +119,46 @@ public class EventProcessor implements AutoCloseable {
     }
 
 
+    private void checkAndRespond(AtomicBoolean responded, Supplier<Boolean> confirmationFunction) {
+        synchronized(responded) {
+            if (!responded.get())
+                responded.set(confirmationFunction.get());
+        }
+    }
+
+
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
         final int eventCount = events.size();
         final AtomicBoolean responded = new AtomicBoolean(false);
         final Map<TestEventToStore, TestEventToStore> completed = new ConcurrentHashMap<>();
 
-        Callback<TestEventToStore> callback = new Callback<>() {
+        Callback<TestEventToStore> persistorCallback = new Callback<>() {
             @Override
             public void onSuccess(TestEventToStore persistedEvent) {
                 completed.put(persistedEvent, persistedEvent);
-                if (completed.size() == eventCount) {
-                    synchronized(responded) {
-                        if (!responded.get()) {
-                            responded.set(confirm(confirmation));
-                        }
-                    }
-                }
+                if (completed.size() == eventCount)
+                    checkAndRespond(responded, () -> confirm(confirmation));
             }
 
             @Override
             public void onFail(TestEventToStore persistedEvent) {
-                synchronized(responded) {
-                    if (!responded.get()) {
-                        responded.set(reject(confirmation));
-                    }
-                }
+                checkAndRespond(responded, () -> reject(confirmation));
                 if (persistedEvent != null)
                     completed.put(persistedEvent, persistedEvent);
             }
         };
 
-        for (Event event : events) {
+        events.forEach((event) -> {
             try {
                 TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
-                persist(cradleEventSingle, callback);
+                persist(cradleEventSingle, persistorCallback);
             } catch (Exception e) {
                 LOGGER.error("Failed to process single event'{}'", shortDebugString(event), e);
-                callback.onFail(null);
+                persistorCallback.onFail(null);
                 metrics.registerFailure();
             }
-        }
+        });
     }
 
 
