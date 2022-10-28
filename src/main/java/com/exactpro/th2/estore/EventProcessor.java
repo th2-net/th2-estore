@@ -68,20 +68,9 @@ public class EventProcessor implements AutoCloseable {
     public void start() {
 
         if (monitor == null) {
-            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
-                @Override
-                public void handle(@NotNull DeliveryMetadata deliveryMetadata, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
-                    process(eventBatch, confirmation);
-                }
-
-                @Override
-                public void handle(@NotNull String s, EventBatch eventBatch, @NotNull ManualAckDeliveryCallback.Confirmation confirmation) {
-                }
-
-                @Override
-                public void onClose() {
-                }
-            }, ATTRIBUTES);
+            monitor = router.subscribeAllWithManualAck(
+                    (deliveryMetadata, eventBatch, confirmation) -> process(eventBatch, confirmation),
+                    ATTRIBUTES);
 
             if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");

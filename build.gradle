@@ -59,7 +59,7 @@ dependencies {
     api platform('com.exactpro.th2:bom:3.0.0')
 
     implementation 'com.exactpro.th2:task-utils:0.1.1'
-    implementation 'com.exactpro.th2:common:5.0.0-th2-4299-functional-interface-3295784744-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:5.0.0-th2-4299-functional-interface-java-3336882110-SNAPSHOT'
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
