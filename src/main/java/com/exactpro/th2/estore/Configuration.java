@@ -16,8 +16,8 @@
 package com.exactpro.th2.estore;
 
 public class Configuration {
-    private static final int DEFAULT_MAX_TASK_RETRIES = 3;
-    private static final int DEFAULT_MAX_TASK_COUNT = 1024;
+    private static final int DEFAULT_MAX_TASK_RETRIES = 1000000;
+    private static final int DEFAULT_MAX_TASK_COUNT = 256;
     private static final long DEFAULT_RETRY_DELAY_BASEM_S = 5000;
 
     private Integer  maxTaskCount;
