@@ -34,7 +34,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -107,7 +106,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
 
     @Override
-    public void persist(StoredTestEvent event, Consumer<StoredTestEvent> callback) {
+    public void persist(StoredTestEvent event, Callback<StoredTestEvent> callback) {
         metrics.takeQueueMeasurements();
         PersistenceTask task = new PersistenceTask(event, callback);
         taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));
@@ -199,23 +198,28 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     eventBatch.getId(),
                     retriesDone,
                     e);
-            persistenceTask.complete();
+            persistenceTask.fail();
         }
     }
 
 
     static class PersistenceTask {
         final StoredTestEvent eventBatch;
-        final Consumer<StoredTestEvent> callback;
+        final Callback<StoredTestEvent> callback;
 
-        PersistenceTask(StoredTestEvent eventBatch, Consumer<StoredTestEvent> callback) {
+        PersistenceTask(StoredTestEvent eventBatch, Callback<StoredTestEvent> callback) {
             this.eventBatch = eventBatch;
             this.callback = callback;
         }
 
         void complete () {
             if (callback != null)
-                callback.accept(eventBatch);
+                callback.onSuccess(eventBatch);
+        }
+
+        void fail() {
+            if (callback != null)
+                callback.onFail(eventBatch);
         }
     }
 }
