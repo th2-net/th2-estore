@@ -67,6 +67,10 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
     }
 
 
+    public  EventPersistorMetrics<PersistenceTask> getMetrics() {
+        return metrics;
+    }
+    
     public void start() throws InterruptedException {
         this.stopped = false;
         synchronized (signal) {

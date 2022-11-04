@@ -75,6 +75,7 @@ public class EventProcessor implements AutoCloseable {
                 public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
                     Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
                     try {
+                        ((EventPersistor)persistor).getMetrics().updateEventMeasurements(1, eventBatch.getEventsCount());
                         confirm(confirmation);
                     } finally {
                         timer.observeDuration();
