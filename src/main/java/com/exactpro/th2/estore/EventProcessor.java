@@ -73,7 +73,12 @@ public class EventProcessor implements AutoCloseable {
             monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
                 @Override
                 public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
-                    confirm(confirmation);
+                    Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+                    try {
+                        confirm(confirmation);
+                    } finally {
+                        timer.observeDuration();
+                    }
                 }
 
                 @Override
