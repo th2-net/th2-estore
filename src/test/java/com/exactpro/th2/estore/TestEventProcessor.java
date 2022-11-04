@@ -121,6 +121,110 @@ public class TestEventProcessor {
     }
 
     @Test
+    @DisplayName("confirmation is sent once for root event batch")
+    public void testRootEventBatchConfirmation() throws Exception {
+        String book = "test-book";
+        String scope = "test-scope";
+
+        Event first = start().name("sub-event-first").toProto(book, scope);
+        Event second = start().name("sub-event-second").toProto(scope, scope);
+        eventStore.process(deliveryOf(first, second), confirmation);
+
+        verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
+
+        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
+
+        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
+        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+
+        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        assertNotNull(capturedValue, "Captured first stored event");
+        assertStoredEvent(first, capturedEvents.get(0));
+
+        capturedValue = capturedEvents.get(1);
+        assertNotNull(capturedValue, "Captured second stored event");
+        assertStoredEvent(second, capturedEvents.get(1));
+
+        // trigger and verify confirmations
+        capturedCallbacks.get(0).onSuccess(capturedEvents.get(0));
+        capturedCallbacks.get(1).onSuccess(capturedEvents.get(1));
+        verify(confirmation, times(1)).confirm();
+        verify(confirmation, times(0)).reject();
+    }
+
+    @Test
+    @DisplayName("rejection is sent once for root event batch")
+    public void testRootEventBatchRejection() throws Exception {
+        String book = "test-book";
+        String scope = "test-scope";
+
+        Event first = start().name("sub-event-first").toProto(book, scope);
+        Event second = start().name("sub-event-second").toProto(scope, scope);
+        eventStore.process(deliveryOf(first, second), confirmation);
+
+        verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
+
+        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
+
+        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
+        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+
+        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        assertNotNull(capturedValue, "Captured first stored event");
+        assertStoredEvent(first, capturedEvents.get(0));
+
+        capturedValue = capturedEvents.get(1);
+        assertNotNull(capturedValue, "Captured second stored event");
+        assertStoredEvent(second, capturedEvents.get(1));
+
+        // trigger and verify confirmations
+        capturedCallbacks.get(0).onFail(capturedEvents.get(0));
+        capturedCallbacks.get(1).onFail(capturedEvents.get(1));
+        verify(confirmation, times(1)).reject();
+        verify(confirmation, times(0)).confirm();
+    }
+
+
+    @Test
+    @DisplayName("rejection is sent one one single event fails in batch")
+    public void testRootEventBatchRejectionOnSingleFailure() throws Exception {
+        String book = "test-book";
+        String scope = "test-scope";
+
+        Event first = start().name("sub-event-first").toProto(book, scope);
+        Event second = start().name("sub-event-second").toProto(scope, scope);
+        eventStore.process(deliveryOf(first, second), confirmation);
+
+        verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
+
+        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
+
+        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
+        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+
+        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        assertNotNull(capturedValue, "Captured first stored event");
+        assertStoredEvent(first, capturedEvents.get(0));
+
+        capturedValue = capturedEvents.get(1);
+        assertNotNull(capturedValue, "Captured second stored event");
+        assertStoredEvent(second, capturedEvents.get(1));
+
+        // trigger and verify confirmations
+        capturedCallbacks.get(0).onSuccess(capturedEvents.get(0));
+        capturedCallbacks.get(1).onFail(capturedEvents.get(1));
+        verify(confirmation, times(1)).reject();
+        verify(confirmation, times(0)).confirm();
+    }
+
+
+    @Test
     @DisplayName("Event batch with two events without messages")
     public void testEventsBatchDelivery() throws Exception {
         EventID parentId = createRandomEventId();

@@ -39,7 +39,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -64,7 +63,7 @@ public class TestEventPersistor {
     private final CradleStorage storageMock = mock(CradleStorage.class);
 
     @SuppressWarnings("unchecked")
-    private final Consumer<TestEventToStore> callback = mock(Consumer.class);
+    private final Callback<TestEventToStore> callback = mock(Callback.class);
     private EventPersistor persistor;
 
     private CradleEntitiesFactory cradleEntitiesFactory;
@@ -101,7 +100,8 @@ public class TestEventPersistor {
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(1)).processTask(any());
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(callback, times(1)).accept(any());
+        verify(callback, times(1)).onSuccess(any());
+        verify(callback, times(0)).onFail(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -120,7 +120,8 @@ public class TestEventPersistor {
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(1)).processTask(any());
         verify(storageMock, times(1)).storeTestEventAsync(capture.capture());
-        verify(callback, times(1)).accept(any());
+        verify(callback, times(1)).onSuccess(any());
+        verify(callback, times(0)).onFail(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -144,7 +145,8 @@ public class TestEventPersistor {
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(2)).processTask(any());
         verify(storageMock, times(2)).storeTestEventAsync(capture.capture());
-        verify(callback, times(1)).accept(any());
+        verify(callback, times(1)).onSuccess(any());
+        verify(callback, times(0)).onFail(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -168,7 +170,8 @@ public class TestEventPersistor {
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(MAX_EVENT_PERSIST_RETRIES + 1)).processTask(any());
         verify(storageMock, times(MAX_EVENT_PERSIST_RETRIES + 1)).storeTestEventAsync(capture.capture());
-        verify(callback, times(1)).accept(any());
+        verify(callback, times(0)).onSuccess(any());
+        verify(callback, times(1)).onFail(any());
 
         TestEventToStore value = capture.getValue();
         assertNotNull(value, "Captured stored root event");
@@ -205,7 +208,8 @@ public class TestEventPersistor {
 
         verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(MAX_EVENT_QUEUE_TASK_SIZE)).storeTestEventAsync(any());
         verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
-        verify(callback, after(totalExecutionTime).times(totalEvents)).accept(any());
+        verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
+        verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
         executor.shutdown();
         executor.awaitTermination(0, TimeUnit.MILLISECONDS);
@@ -252,7 +256,8 @@ public class TestEventPersistor {
 
         verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(eventCapacityInQueue)).storeTestEventAsync(any());
         verify(storageMock, after(totalExecutionTime).times(totalEvents)).storeTestEventAsync(any());
-        verify(callback, after(totalExecutionTime).times(totalEvents)).accept(any());
+        verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
+        verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
         executor.shutdown();
         executor.awaitTermination(0, TimeUnit.MILLISECONDS);

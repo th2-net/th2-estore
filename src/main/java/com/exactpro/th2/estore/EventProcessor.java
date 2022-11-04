@@ -26,11 +26,8 @@ import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
 import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
 import com.exactpro.th2.common.grpc.EventOrBuilder;
+import com.exactpro.th2.common.schema.message.*;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
-import com.exactpro.th2.common.schema.message.ManualConfirmationListener;
-import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.exactpro.th2.common.schema.message.QueueAttribute;
-import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.exactpro.th2.common.util.StorageUtils;
 import com.google.protobuf.TextFormat;
 import io.prometheus.client.Histogram;
@@ -39,9 +36,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
 public class EventProcessor implements AutoCloseable {
@@ -66,16 +68,9 @@ public class EventProcessor implements AutoCloseable {
     public void start() {
 
         if (monitor == null) {
-            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
-                @Override
-                public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
-                    process(eventBatch, confirmation);
-                }
-
-                @Override
-                public void onClose() {
-                }
-            }, ATTRIBUTES);
+            monitor = router.subscribeAllWithManualAck(
+                    (deliveryMetadata, eventBatch, confirmation) -> process(eventBatch, confirmation),
+                    ATTRIBUTES);
 
             if (monitor == null) {
                 LOGGER.error("Cannot find queues for subscribe");
@@ -85,28 +80,21 @@ public class EventProcessor implements AutoCloseable {
         }
     }
 
-    public void process(EventBatch eventBatch, Confirmation confirmation) {
-        try {
-            List<Event> events = eventBatch.getEventsList();
-            if (events.isEmpty()) {
-                if (LOGGER.isWarnEnabled())
-                    LOGGER.warn("Skipped empty event batch " + TextFormat.shortDebugString(eventBatch));
-                confirm(confirmation);
-                return;
-            }
 
+    public void process(EventBatch eventBatch, Confirmation confirmation) {
+        List<Event> events = eventBatch.getEventsList();
+        if (events.isEmpty()) {
+            if (LOGGER.isWarnEnabled())
+                LOGGER.warn("Skipped empty event batch " + TextFormat.shortDebugString(eventBatch));
+            confirm(confirmation);
+        } else {
             if (eventBatch.hasParentEventId())
                 storeEventBatch(eventBatch, confirmation);
             else
-                for (Event event : events)
-                    storeSingleEvent(event, confirmation);
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to store event batch '{}'", TextFormat.shortDebugString(eventBatch), e);
-            confirm(confirmation);
-            metrics.registerFailure();
+                storeSingleEvents(events, confirmation);
         }
     }
+
 
     @Override
     public void close() {
@@ -119,38 +107,105 @@ public class EventProcessor implements AutoCloseable {
         }
     }
 
-    private void storeSingleEvent(Event protoEvent, Confirmation confirmation) throws Exception {
-        TestEventSingleToStore cradleEventSingle = toCradleEvent(protoEvent);
-        persist(cradleEventSingle, confirmation);
-    }
 
-
-    private void storeEventBatch(EventBatch protoBatch, Confirmation confirmation) throws Exception {
-
-        TestEventBatchToStore cradleBatch = toCradleBatch(protoBatch);
-        persist(cradleBatch, confirmation);
-    }
-
-    private void confirm(Confirmation confirmation) {
-        try {
-            if (confirmation != null)
-                confirmation.confirm();
-        } catch (Exception e) {
-            LOGGER.error("Exception sending acknowledgement", e);
+    private void checkAndRespond(AtomicBoolean responded, Supplier<Boolean> confirmationFunction) {
+        synchronized(responded) {
+            if (!responded.get())
+                responded.set(confirmationFunction.get());
         }
     }
 
-    private void persist(TestEventToStore data, Confirmation confirmation) {
+
+    private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
+
+        final int eventCount = events.size();
+        final AtomicBoolean responded = new AtomicBoolean(false);
+        final Map<TestEventToStore, TestEventToStore> completed = new ConcurrentHashMap<>();
+
+        Callback<TestEventToStore> persistorCallback = new Callback<>() {
+            @Override
+            public void onSuccess(TestEventToStore persistedEvent) {
+                completed.put(persistedEvent, persistedEvent);
+                if (completed.size() == eventCount)
+                    checkAndRespond(responded, () -> confirm(confirmation));
+            }
+
+            @Override
+            public void onFail(TestEventToStore persistedEvent) {
+                checkAndRespond(responded, () -> reject(confirmation));
+                if (persistedEvent != null)
+                    completed.put(persistedEvent, persistedEvent);
+            }
+        };
+
+        events.forEach((event) -> {
+            try {
+                TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
+                persist(cradleEventSingle, persistorCallback);
+            } catch (Exception e) {
+                LOGGER.error("Failed to process single event'{}'", shortDebugString(event), e);
+                persistorCallback.onFail(null);
+                metrics.registerFailure();
+            }
+        });
+    }
+
+
+    private void storeEventBatch(EventBatch eventBatch, Confirmation confirmation) {
+
+        try {
+            TestEventBatchToStore cradleBatch = toCradleBatch(eventBatch);
+            persist(cradleBatch, new Callback<>() {
+                @Override
+                public void onSuccess(TestEventToStore data) {
+                    confirm(confirmation);
+                }
+
+                @Override
+                public void onFail(TestEventToStore data) {
+                    reject(confirmation);
+                }
+            });
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to process event batch '{}'", shortDebugString(eventBatch), e);
+            reject(confirmation);
+            metrics.registerFailure();
+        }
+    }
+
+
+    private static boolean confirm(Confirmation confirmation) {
+        try {
+            confirmation.confirm();
+        } catch (Exception e) {
+            LOGGER.error("Exception confirming message", e);
+            return false;
+        }
+        return true;
+    }
+
+
+    private static boolean reject(Confirmation confirmation) {
+        try {
+            confirmation.reject();
+        } catch (Exception e) {
+            LOGGER.error("Exception rejecting message", e);
+            return false;
+        }
+        return true;
+    }
+
+
+    private void persist(TestEventToStore data, Callback<TestEventToStore> callback) throws Exception {
         Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         try {
-            persistor.persist(data, (batch) -> confirm(confirmation));
-        } catch (Exception e) {
-            LOGGER.error("Persistence exception", e);
-            metrics.registerFailure();
+            persistor.persist(data, callback);
         } finally {
             timer.observeDuration();
         }
     }
+
 
     public TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
         TestEventSingleToStoreBuilder builder = TestEventToStore
