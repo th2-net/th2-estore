@@ -21,11 +21,8 @@ import com.exactpro.cradle.testevents.*;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.schema.message.*;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
-import com.exactpro.th2.common.schema.message.ManualConfirmationListener;
-import com.exactpro.th2.common.schema.message.MessageRouter;
-import com.exactpro.th2.common.schema.message.QueueAttribute;
-import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -70,20 +67,12 @@ public class EventProcessor implements AutoCloseable {
         persistor.persist(rootEvent, null);
 
         if (monitor == null) {
-            monitor = router.subscribeAllWithManualAck(new ManualConfirmationListener<>() {
-                @Override
-                public void handle(@NotNull String tag, EventBatch eventBatch, @NotNull Confirmation confirmation)  {
-                    Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
-                    try {
-                        ((EventPersistor)persistor).getMetrics().updateEventMeasurements(1, eventBatch.getEventsCount());
-                        confirm(confirmation);
-                    } finally {
-                        timer.observeDuration();
-                    }
-                }
-
-                @Override
-                public void onClose() {
+            monitor = router.subscribeAll((consumerTag, eventBatch) -> {
+                Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+                try {
+                    ((EventPersistor)persistor).getMetrics().updateEventMeasurements(1, eventBatch.getEventsCount());
+                } finally {
+                    timer.observeDuration();
                 }
             }, ATTRIBUTES);
 
