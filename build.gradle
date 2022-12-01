@@ -8,7 +8,7 @@ plugins {
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
     junitJupiterEngineVersion   = '5.4.0'
-    cradleVersion               = '5.0.0-TH2-4487-3585175358-812dd08-SNAPSHOT'
+    cradleVersion               = '5.0.0-TH2-4487-3591359026-9169148-SNAPSHOT'
 }
 
 group = 'com.exactpro.th2'
