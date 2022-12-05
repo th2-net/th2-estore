@@ -94,13 +94,29 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 ScheduledRetryableTask<PersistenceTask> task = taskQueue.awaitScheduled();
                     try {
                         processTask(task);
-                    } catch (IOException e) {
-                        logAndRetry(task, e);
+                    } catch (Exception e) {
+                        resolveTaskError(task, e);
                     }
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. aborting");
                 break;
             }
+        }
+    }
+
+    private void logAndFail(ScheduledRetryableTask<PersistenceTask> task, String logMessage, Throwable e) {
+        taskQueue.complete(task);
+        metrics.registerAbortedPersistence();
+        LOGGER.error(logMessage, e);
+        task.getPayload().fail();
+    }
+
+    private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
+        if (e instanceof IOException && e.getMessage().startsWith("Invalid test event")) {
+            // If following exceptions were thrown there's no point in retrying
+            logAndFail(task, String.format("Can't retry after %s exception", e.getClass().getSimpleName()), e);
+        } else {
+            logAndRetry(task, e);
         }
     }
 
@@ -160,7 +176,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     {
                         timer.observeDuration();
                         if (ex != null) {
-                            logAndRetry(task, ex);
+                            resolveTaskError(task, ex);
                         } else {
                             taskQueue.complete(task);
                             metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
@@ -191,14 +207,11 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
             metrics.registerPersistenceRetry(retriesDone);
 
         } else {
-
-            taskQueue.complete(task);
-            metrics.registerAbortedPersistence();
-            LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
-                    eventBatch.getId(),
-                    retriesDone,
+            logAndFail(task,
+                    String.format("Failed to store the event batch id '%s', aborting after %d executions",
+                            eventBatch.getId(),
+                            retriesDone),
                     e);
-            persistenceTask.fail();
         }
     }
 
