@@ -115,7 +115,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
         if (e instanceof BookNotFoundException || e instanceof PageNotFoundException) {
             // If following exceptions were thrown there's no point in retrying
-            logAndFail(task, String.format("Can't retry after %s exception", e.getClass()), e);
+            logAndFail(task, String.format("Can't retry after %s exception", e.getClass().getSimpleName()), e);
         } else {
             logAndRetry(task, e);
         }
