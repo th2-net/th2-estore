@@ -16,6 +16,8 @@
 package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.errors.BookNotFoundException;
+import com.exactpro.cradle.errors.PageNotFoundException;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
@@ -93,12 +95,28 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                     try {
                         processTask(task);
                     } catch (Exception e) {
-                        logAndRetry(task, e);
+                        resolveTaskError(task, e);
                     }
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. aborting");
                 break;
             }
+        }
+    }
+
+    private void logAndFail(ScheduledRetryableTask<PersistenceTask> task, String logMessage, Throwable e) {
+        taskQueue.complete(task);
+        metrics.registerAbortedPersistence();
+        LOGGER.error(logMessage, e);
+        task.getPayload().fail();
+    }
+
+    private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
+        if (e instanceof BookNotFoundException || e instanceof PageNotFoundException) {
+            // If following exceptions were thrown there's no point in retrying
+            logAndFail(task, String.format("Can't retry after %s exception", e.getClass().getSimpleName()), e);
+        } else {
+            logAndRetry(task, e);
         }
     }
 
@@ -158,7 +176,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                     {
                         timer.observeDuration();
                         if (ex != null) {
-                            logAndRetry(task, ex);
+                            resolveTaskError(task, ex);
                         } else {
                             taskQueue.complete(task);
                             metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
@@ -189,14 +207,11 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
             metrics.registerPersistenceRetry(retriesDone);
 
         } else {
-
-            taskQueue.complete(task);
-            metrics.registerAbortedPersistence();
-            LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
-                    eventBatch.getId(),
-                    retriesDone,
+            logAndFail(task,
+                    String.format("Failed to store the event batch id '%s', aborting after %d executions",
+                            eventBatch.getId(),
+                            retriesDone),
                     e);
-            persistenceTask.fail();
         }
     }
 
