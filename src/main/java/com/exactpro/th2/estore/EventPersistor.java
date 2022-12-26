@@ -18,7 +18,6 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.errors.BookNotFoundException;
 import com.exactpro.cradle.errors.PageNotFoundException;
-import com.exactpro.cradle.messages.GroupedMessageBatchToStore;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
