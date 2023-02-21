@@ -382,7 +382,7 @@ public class TestEventProcessor {
         return MessageID.newBuilder()
                 .setConnectionId(ConnectionID.newBuilder().setSessionAlias("session-alias-" + RANDOM.nextInt()).build())
                 .setDirection(Direction.forNumber(RANDOM.nextInt(2)))
-                .setSequence(RANDOM.nextLong())
+                .setSequence(Math.abs(RANDOM.nextLong()))
                 .setBookName(parentId.getBookName())
                 .setTimestamp(com.exactpro.th2.common.message.MessageUtils.toTimestamp(Date.from(Instant.now())))
                 .build();

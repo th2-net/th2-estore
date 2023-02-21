@@ -56,10 +56,10 @@ jar {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:3.0.0')
+    api platform('com.exactpro.th2:bom:4.1.0')
 
     implementation 'com.exactpro.th2:task-utils:0.1.1'
-    implementation 'com.exactpro.th2:common:5.0.0-dev-version-5-3385986983-SNAPSHOT'
+    implementation 'com.exactpro.th2:common:5.1.0-dev-version-5-4085018593-8adee33-SNAPSHOT'
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
