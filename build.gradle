@@ -8,7 +8,7 @@ plugins {
 
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
-    junitJupiterEngineVersion   = '5.4.0'
+    cradleVersion               = '3.1.4'
 }
 
 group = 'com.exactpro.th2'
@@ -63,13 +63,23 @@ configurations {
 
 dependencies {
     api platform('com.exactpro.th2:bom:4.2.0')
-
     implementation 'com.exactpro.th2:common:3.44.1'
+    implementation 'com.exactpro.th2:task-utils:0.1.1'
+    implementation("com.exactpro.th2:cradle-core:$cradleVersion") {
+        because('need to override common dep. remove in release')
+        force true
+    }
+    implementation("com.exactpro.th2:cradle-cassandra:$cradleVersion") {
+        because('need to override common dep. remove in release')
+        force true
+    }
 
+    implementation 'io.prometheus:simpleclient:0.9.0'
+    implementation "org.slf4j:slf4j-api:1.7.36"
     implementation "org.jetbrains:annotations"
 
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.4.2'
-    testImplementation 'org.mockito:mockito-junit-jupiter:3.6.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:4.6.1'
 }
 
 test {
@@ -77,7 +87,7 @@ test {
 }
 
 application {
-    mainClassName 'com.exactpro.th2.estore.EventStoreMain'
+    mainClassName 'com.exactpro.th2.estore.EventStore'
 }
 
 applicationName = 'service'

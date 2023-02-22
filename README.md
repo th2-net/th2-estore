@@ -1,4 +1,4 @@
-# Overview (4.1.0)
+# Overview (4.1.3)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -39,22 +39,73 @@ spec:
         cpu: 20m
 ```
 
+# Configuration
+
+Configuration is provided as `custom.json` file
+
+```json
+{
+    "maxTaskCount" : 256,
+    "maxTaskDataSize" : 133169152,
+    "maxRetryCount" : 1000000,
+    "retryDelayBase" : 5000
+}
+```
+
+
++ _maxTaskCount_ - maximum number of events that will be processed simultaneously
++ _maxTaskDataSize_ - maximum total data size of events during parallel processing
++ _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure
++ _retryDelayBase_ - constant that will be used to calculate next retry time(ms):
+retryDelayBase * retryNumber
+
+If some of these parameters are not provided, estore will use default(undocumented) value.
+If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
+until some events are processed
+
 # Common features
 
 This is a list of supported features provided by libraries.
-1. CradleMaxEventBatchSize - this option defines the maximum event batch size in bytes.
+
+_CradleMaxEventBatchSize_ - this option defines the maximum event batch size in bytes.
 Please see more details about this feature via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
 
 # Changes
 
+## 4.1.3
+
++ Update common version from `3.44.0` to `3.44.1`
++ Update bom version from `4.1.0` to `4.2.0`.
+
+## 4.1.2
+
++ Update common version from `3.36.0` to `3.44.0`
++ Update bom version from `3.1.1` to `4.1.0`.
+
+## 4.1.1
+
++ Using Cradle 3.1.4 with a fix for degraded performance while persisting events
++ Sending manual acknowledgements only after successfully saving event
++ Changed default configuration to 
+```json
+{
+    "maxTaskCount" : 256,
+    "maxRetryCount" : 1000000,
+    "retryDelayBase" : 5000
+}
+```
 ## 4.1.0
 
-+ Update common:3.44.1
-+ Update bom:4.2.0
++ Added metrics collection for Prometheus
++ Limiting simultaneously processed events by number and content size  
++ Retrying saving events in case of failure  
++ Updated cradle version from `3.1.1` to `3.1.3`. This requires data migration
+
 
 ## 4.0.0
 
-+ Update common version from `3.35.0` to `3.36.0`
++ Update common version from `3.35.0` to `3.39.3`
+  + Fixed problem with unconfirmed deliveries 
   + Cradle version is updated from `2.21.0` to `3.1.1`
     (please, note that the new version of Cradle is not compatible with Cradle `2.*` and requires additional schema migration if you want to keep the stored data)
   + Messages' IDs that are attached to the event are stored along with event itself
