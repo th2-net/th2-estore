@@ -9,7 +9,7 @@ plugins {
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
     junitJupiterEngineVersion   = '5.4.0'
-    cradleVersion               = '5.0.0-dev-version-5-4290920802-ae1618e-SNAPSHOT'
+    cradleVersion               = '5.0.0-dev-version-5-4300900143-24582b4-SNAPSHOT'
     commonVersion               = '5.2.0-dev'
 }
 
