@@ -8,7 +8,7 @@ plugins {
 
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
-    cradleVersion               = '3.1.5-th2-4877-4667162750-4a37e05-SNAPSHOT'
+    cradleVersion               = '3.1.5-dev-version-3.1-4675933210-3c490be-SNAPSHOT'
 }
 
 group = 'com.exactpro.th2'
