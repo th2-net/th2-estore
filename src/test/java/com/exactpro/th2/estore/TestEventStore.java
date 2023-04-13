@@ -324,7 +324,7 @@ public class TestEventStore {
         }
         for (int i = 0; i < numberOfMessages; i++) {
             eventBuilder.addAttachedMessageIds(createMessageId("session-alias-" + random.nextInt(),
-                    Direction.forNumber(random.nextInt(2)), random.nextLong()));
+                    Direction.forNumber(random.nextInt(2)), random.nextInt(Integer.MAX_VALUE)));
         }
 
         return eventBuilder.setEndTimestamp(createTimestamp())

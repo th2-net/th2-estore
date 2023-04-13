@@ -3,11 +3,12 @@ plugins {
     id 'java-library'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
+    id "org.owasp.dependencycheck" version "8.1.0"
 }
 
 ext {
     sharedDir                   = file("${project.rootDir}/shared")
-    cradleVersion               = '3.1.4'
+    cradleVersion               = '3.1.5'
 }
 
 group = 'com.exactpro.th2'
@@ -54,9 +55,15 @@ jar {
     }
 }
 
+configurations {
+    compileClasspath {
+        resolutionStrategy.activateDependencyLocking()
+    }
+}
+
 dependencies {
-    api platform('com.exactpro.th2:bom:3.0.0')
-    implementation 'com.exactpro.th2:common:3.39.3'
+    api platform('com.exactpro.th2:bom:4.2.0')
+    implementation 'com.exactpro.th2:common:3.44.1'
     implementation 'com.exactpro.th2:task-utils:0.1.1'
     implementation("com.exactpro.th2:cradle-core:$cradleVersion") {
         because('need to override common dep. remove in release')
@@ -95,4 +102,15 @@ dockerPrepare {
 
 docker {
     copySpec.from(tarTree("$buildDir/distributions/${applicationName}.tar"))
+}
+
+dependencyCheck {
+    formats=['SARIF', 'JSON', 'HTML']
+    failBuildOnCVSS=5
+
+    analyzers {
+        assemblyEnabled = false
+        nugetconfEnabled = false
+        nodeEnabled = false
+    }
 }
