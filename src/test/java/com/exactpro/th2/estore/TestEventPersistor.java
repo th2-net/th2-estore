@@ -35,10 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -55,11 +52,12 @@ public class TestEventPersistor {
     private static final int  MAX_EVENT_PERSIST_RETRIES   = 2;
     private static final int  MAX_EVENT_QUEUE_TASK_SIZE   = 8;
     private static final long MAX_EVENT_QUEUE_DATA_SIZE   = 10_000L;
+    private static final long STORE_ACTION_REJECTION_THRESHOLD = 30_000L;
 
     private static final String BOOK_NAME = "test-book";
     private static final String SCOPE = "test-scope";
 
-    private final Random random = new Random();
+    private final ThreadLocalRandom random = ThreadLocalRandom.current();
     private final CradleStorage storageMock = mock(CradleStorage.class);
 
     @SuppressWarnings("unchecked")
@@ -70,7 +68,7 @@ public class TestEventPersistor {
 
     @BeforeEach
     void setUp() throws CradleStorageException, IOException, InterruptedException {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE, STORE_ACTION_REJECTION_THRESHOLD));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
         Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, MAX_EVENT_QUEUE_DATA_SIZE);
@@ -342,7 +340,7 @@ public class TestEventPersistor {
                                                int numberOfMessages,
                                                byte[] content) throws CradleStorageException {
 
-        TestEventSingleToStoreBuilder eventBuilder = new TestEventSingleToStoreBuilder()
+        TestEventSingleToStoreBuilder eventBuilder = cradleEntitiesFactory.testEventBuilder()
                 .id(bookId, scope, timestamp, id)
                 .name(name)
                 .parentId(parentId)
@@ -357,7 +355,7 @@ public class TestEventPersistor {
                         "session-alias-" + random.nextInt(),
                         Direction.SECOND,
                         timestamp,
-                        random.nextLong())
+                        random.nextLong(Long.MAX_VALUE))
             );
         }
 

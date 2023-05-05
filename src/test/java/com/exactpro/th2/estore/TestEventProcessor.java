@@ -39,6 +39,8 @@ import static org.mockito.Mockito.*;
 public class TestEventProcessor {
     private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
     private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
+    private static final long STORE_ACTION_REJECTION_THRESHOLD = 30_000L;
+
     private static final String ROOT_ID = "root-id";
     private static final Random RANDOM = new Random();
 
@@ -53,7 +55,7 @@ public class TestEventProcessor {
 
     @BeforeEach
     void setUp() throws Exception {
-        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE));
+        cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE, STORE_ACTION_REJECTION_THRESHOLD));
         eventStore = spy(new EventProcessor(routerMock, cradleEntitiesFactory, persistorMock));
     }
 

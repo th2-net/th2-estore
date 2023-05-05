@@ -8,7 +8,7 @@ plugins {
 
 ext {
     junitJupiterEngineVersion   = '5.4.0'
-    cradleVersion               = '5.0.1'
+    cradleVersion               = '5.0.1-dev-version-5-4797213397-fa1321e-SNAPSHOT'
     commonVersion               = '5.2.0'
 }
 
@@ -51,9 +51,15 @@ jar {
     }
 }
 
+configurations.configureEach {
+    resolutionStrategy {
+        force "com.exactpro.th2:cradle-core:$cradleVersion"
+        force "com.exactpro.th2:cradle-cassandra:$cradleVersion"
+    }
+}
+
 dependencies {
     api platform('com.exactpro.th2:bom:4.2.0')
-
     implementation 'com.exactpro.th2:task-utils:0.1.1'
     implementation "com.exactpro.th2:common:$commonVersion"
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"

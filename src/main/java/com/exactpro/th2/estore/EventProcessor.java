@@ -208,8 +208,8 @@ public class EventProcessor implements AutoCloseable {
 
 
     public TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
-        TestEventSingleToStoreBuilder builder = TestEventToStore
-                .singleBuilder()
+        TestEventSingleToStoreBuilder builder = entitiesFactory
+                .testEventBuilder()
                 .id(ProtoUtil.toCradleEventID(protoEvent.getId()))
                 .name(protoEvent.getName())
                 .type(protoEvent.getType())
