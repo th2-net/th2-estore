@@ -63,7 +63,7 @@ dependencies {
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
-    // FIXME: Added as API depenency to common com.exactpro.th2.common.event.Event.toProto(...) throws `JsonProcessingException`
+    // FIXME: Added as API dependency to common com.exactpro.th2.common.event.Event.toProto(...) throws `JsonProcessingException`
     implementation 'com.fasterxml.jackson.core:jackson-core'
 
     implementation 'io.prometheus:simpleclient'
@@ -99,7 +99,7 @@ docker {
 dependencyCheck {
     formats = ['SARIF', 'JSON', 'HTML']
     failBuildOnCVSS = 5
-
+    suppressionFile = file('suppressions.xml')
     analyzers {
         assemblyEnabled = false
         nugetconfEnabled = false
