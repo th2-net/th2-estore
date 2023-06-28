@@ -7,7 +7,7 @@ plugins {
 }
 
 ext {
-    cradleVersion = '5.0.1-dev-version-5-4797213397-fa1321e-SNAPSHOT'
+    cradleVersion = '5.1.0-separate-executor-5334417446-8a1a37d-SNAPSHOT'
 }
 
 group = 'com.exactpro.th2'
