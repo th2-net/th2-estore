@@ -199,8 +199,9 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         if (task.getRetriesLeft() > 0) {
 
-            LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
+            LOGGER.error("Failed to store the event batch id '{}' parentID '{}', {} retries left, rescheduling",
                     eventBatch.getId(),
+                    eventBatch.getParentId(),
                     task.getRetriesLeft(),
                     e);
             taskQueue.retry(task);
