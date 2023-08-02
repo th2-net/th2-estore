@@ -21,3 +21,5 @@ jobs:
       uses: ./ci-github-action
       with:
         ref: ${{ github.sha }}
+    - name: Run check_licenses script
+      run: bash th2-net/.github/license-compliance/check_licenses.sh java
