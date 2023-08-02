@@ -16,7 +16,8 @@ jobs:
     - name: checkout actions
       uses: actions/checkout@v2
       with:
-        repository: th2-net/.github@th2-1836-json-files-update
+        repository: th2-net/.github
+        ref: th2-1836-json-files-update
     - name: Run check_licenses script
       run: ./license-compliance/check_licenses.sh java
   build-job:
