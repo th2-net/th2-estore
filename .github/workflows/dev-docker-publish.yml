@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Run check_licenses script
-      run: bash th2-net/.github/license-compliance/check_licenses.sh java
+      run: https://github.com/th2-net/.github/blob/th2-1836-json-files-update/license-compliance/check_licenses.sh java
+      # run: th2-net/.github/license-compliance/check_licenses.sh java
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
