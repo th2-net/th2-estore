@@ -10,6 +10,11 @@ on:
       - README.md
 
 jobs:
+  check_licenses:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Run check_licenses script
+      run: bash th2-net/.github/license-compliance/check_licenses.sh java
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
