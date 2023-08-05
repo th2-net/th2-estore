@@ -34,7 +34,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -95,8 +94,8 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                 ScheduledRetryableTask<PersistenceTask> task = taskQueue.awaitScheduled();
                     try {
                         processTask(task);
-                    } catch (IOException e) {
-                        logAndRetry(task, e);
+                    } catch (Exception e) {
+                        resolveTaskError(task, e);
                     }
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. aborting");
@@ -105,9 +104,25 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         }
     }
 
+    private void logAndFail(ScheduledRetryableTask<PersistenceTask> task, String logMessage, Throwable e) {
+        taskQueue.complete(task);
+        metrics.registerAbortedPersistence();
+        LOGGER.error(logMessage, e);
+        task.getPayload().fail();
+    }
+
+    private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
+        if (e instanceof IOException && e.getMessage().startsWith("Invalid test event")) {
+            // If following exceptions were thrown there's no point in retrying
+            logAndFail(task, String.format("Can't retry after %s exception", e.getClass().getSimpleName()), e);
+        } else {
+            logAndRetry(task, e);
+        }
+    }
+
 
     @Override
-    public void persist(StoredTestEvent event, Consumer<StoredTestEvent> callback) {
+    public void persist(StoredTestEvent event, Callback<StoredTestEvent> callback) {
         metrics.takeQueueMeasurements();
         PersistenceTask task = new PersistenceTask(event, callback);
         taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));
@@ -161,7 +176,7 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
                     {
                         timer.observeDuration();
                         if (ex != null) {
-                            logAndRetry(task, ex);
+                            resolveTaskError(task, ex);
                         } else {
                             taskQueue.complete(task);
                             metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
@@ -184,38 +199,41 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         if (task.getRetriesLeft() > 0) {
 
-            LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
+            LOGGER.error("Failed to store the event batch id '{}' parentID '{}', {} retries left, rescheduling",
                     eventBatch.getId(),
+                    eventBatch.getParentId(),
                     task.getRetriesLeft(),
                     e);
             taskQueue.retry(task);
             metrics.registerPersistenceRetry(retriesDone);
 
         } else {
-
-            taskQueue.complete(task);
-            metrics.registerAbortedPersistence();
-            LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
-                    eventBatch.getId(),
-                    retriesDone,
+            logAndFail(task,
+                    String.format("Failed to store the event batch id '%s', aborting after %d executions",
+                            eventBatch.getId(),
+                            retriesDone),
                     e);
-            persistenceTask.complete();
         }
     }
 
 
     static class PersistenceTask {
         final StoredTestEvent eventBatch;
-        final Consumer<StoredTestEvent> callback;
+        final Callback<StoredTestEvent> callback;
 
-        PersistenceTask(StoredTestEvent eventBatch, Consumer<StoredTestEvent> callback) {
+        PersistenceTask(StoredTestEvent eventBatch, Callback<StoredTestEvent> callback) {
             this.eventBatch = eventBatch;
             this.callback = callback;
         }
 
         void complete () {
             if (callback != null)
-                callback.accept(eventBatch);
+                callback.onSuccess(eventBatch);
+        }
+
+        void fail() {
+            if (callback != null)
+                callback.onFail(eventBatch);
         }
     }
 }

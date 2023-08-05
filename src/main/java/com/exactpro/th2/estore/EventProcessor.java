@@ -17,7 +17,12 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
-import com.exactpro.cradle.testevents.*;
+import com.exactpro.cradle.testevents.StoredTestEvent;
+import com.exactpro.cradle.testevents.StoredTestEventBatch;
+import com.exactpro.cradle.testevents.StoredTestEventId;
+import com.exactpro.cradle.testevents.StoredTestEventSingle;
+import com.exactpro.cradle.testevents.TestEventBatchToStore;
+import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
@@ -33,14 +38,15 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import static com.exactpro.th2.estore.ProtoUtil.*;
+import static com.exactpro.th2.estore.ProtoUtil.toCradleEvent;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
@@ -118,44 +124,46 @@ public class EventProcessor implements AutoCloseable {
     }
 
 
+    private void checkAndRespond(AtomicBoolean responded, Supplier<Boolean> confirmationFunction) {
+        synchronized(responded) {
+            if (!responded.get())
+                responded.set(confirmationFunction.get());
+        }
+    }
+
+
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
-        Map<Event, Event> watchlist = new HashMap<>();
-        for (Event event : events)
-            watchlist.put(event, event);
+        final int eventCount = events.size();
+        final AtomicBoolean responded = new AtomicBoolean(false);
+        final Map<StoredTestEvent, StoredTestEvent> completed = new ConcurrentHashMap<>();
 
-        boolean nothingPersisted = true;
-        Map<Event, Event> completed = new ConcurrentHashMap<>();
-        for (Event event : events) {
+        Callback<StoredTestEvent> persistorCallback = new Callback<>() {
+            @Override
+            public void onSuccess(StoredTestEvent persistedEvent) {
+                completed.put(persistedEvent, persistedEvent);
+                if (completed.size() == eventCount)
+                    checkAndRespond(responded, () -> confirm(confirmation));
+            }
+
+            @Override
+            public void onFail(StoredTestEvent persistedEvent) {
+                checkAndRespond(responded, () -> reject(confirmation));
+                if (persistedEvent != null)
+                    completed.put(persistedEvent, persistedEvent);
+            }
+        };
+
+        events.forEach((event) -> {
             try {
                 StoredTestEventSingle cradleEvent = cradleStorage.getObjectsFactory().createTestEvent(toCradleEvent(event));
-                persist(cradleEvent, (persistedEvent) -> {
-                    Event e = watchlist.get(event);
-                    if ((e == null || e != event) && LOGGER.isWarnEnabled()) {
-                        LOGGER.warn("Received persistence confirmation on the event not in watchlist (id={})", persistedEvent.getId());
-                    } else {
-                        completed.put(event, event);
-                        if (completed.size() == watchlist.size())
-                            confirm(confirmation);
-                    }
-                });
-                nothingPersisted = false;
+                persist(cradleEvent, persistorCallback);
             } catch (Exception e) {
                 LOGGER.error("Failed to process single event'{}'", shortDebugString(event), e);
-                completed.put(event, event);
+                persistorCallback.onFail(null);
                 metrics.registerFailure();
-                try {
-                    persist(createFailureEvent(formatEvent(event)), null);
-                } catch (Exception pe) {
-                    LOGGER.error("Exception creating failure event", pe);
-                }
             }
-        }
-
-        // None of the events were persisted.
-        // Individual failure events were generated, so we can confirm delivery
-        if (nothingPersisted)
-            confirm(confirmation);
+        });
     }
 
 
@@ -169,40 +177,52 @@ public class EventProcessor implements AutoCloseable {
             for (Event event : eventBatch.getEventsList())
                 cradleBatch.addTestEvent(toCradleEvent(event));
 
-            persist(cradleBatch, (persistedBatch) -> confirm(confirmation));
+            persist(cradleBatch, new Callback<>() {
+                @Override
+                public void onSuccess(StoredTestEvent data) {
+                    confirm(confirmation);
+                }
+
+                @Override
+                public void onFail(StoredTestEvent data) {
+                    reject(confirmation);
+                }
+            });
 
         } catch (Exception e) {
             LOGGER.error("Failed to process event batch '{}'", shortDebugString(eventBatch), e);
-            confirm(confirmation);
+            reject(confirmation);
             metrics.registerFailure();
-            try {
-                persist(createFailureEvent(formatBatch(eventBatch)), null);
-            } catch (Exception pe) {
-                LOGGER.error("Exception creating failure event", pe);
-            }
         }
     }
 
 
-    private void confirm(Confirmation confirmation) {
+    private static boolean confirm(Confirmation confirmation) {
         try {
-            if (confirmation != null)
-                confirmation.confirm();
+            confirmation.confirm();
         } catch (Exception e) {
-            LOGGER.error("Exception sending acknowledgement", e);
+            LOGGER.error("Exception confirming message", e);
+            return false;
         }
+        return true;
     }
 
 
-    private void persist(StoredTestEvent data, Consumer<StoredTestEvent> callback) {
-        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
+    private static boolean reject(Confirmation confirmation) {
         try {
+            // no reject method in this impl
+            confirmation.confirm();
+        } catch (Exception e) {
+            LOGGER.error("Exception rejecting message", e);
+            return false;
+        }
+        return true;
+    }
+
+
+    private void persist(StoredTestEvent data, Callback<StoredTestEvent> callback) throws Exception {
+        try (Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();) {
             persistor.persist(data, callback);
-        } catch (Exception e) {
-            LOGGER.error("Persistence exception", e);
-            metrics.registerFailure();
-        } finally {
-            timer.observeDuration();
         }
     }
 

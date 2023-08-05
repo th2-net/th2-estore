@@ -15,6 +15,7 @@
 
 package com.exactpro.th2.estore;
 
-public interface Persistor<E> {
-    void persist(E data, Callback<E> callback) throws Exception;
+public interface Callback<V> {
+    void onSuccess(V data);
+    void onFail(V data);
 }
