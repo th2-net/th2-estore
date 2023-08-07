@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Run check_licenses script
-      run: /license-compliance/check_licenses.sh java
+      run: /home/runner/work/th2-estore/th2-estore/license-compliance/check_licenses.sh java
 
     # runs-on: ubuntu-latest
     # steps:
