@@ -14,8 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Run check_licenses script
-      run: ls -l
-      shell: bash
+      run: /license-compliance/check_licenses.sh java
 
     # runs-on: ubuntu-latest
     # steps:
