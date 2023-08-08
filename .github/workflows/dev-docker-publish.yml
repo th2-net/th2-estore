@@ -19,9 +19,7 @@ jobs:
         repository: th2-net/th2-estore
         ref: TH2-1836-license-compliance-for-java-projects
     - name: Run check_licenses script
-      run: |
-        chmod +r ./license-compliance/check_licenses.sh
-        ./license-compliance/check_licenses.sh java
+      run: ./license-compliance/check_licenses.sh java
 
     # runs-on: ubuntu-latest
     # steps:
