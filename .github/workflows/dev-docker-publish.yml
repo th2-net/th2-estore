@@ -15,8 +15,6 @@ jobs:
     steps:
     - name: create jq evnironment
       uses: sergeysova/jq-action@v2
-      with:
-        cmd: jq -n env
     - name: checkout actions
       uses: actions/checkout@v2
     - name: Run check_licenses script
