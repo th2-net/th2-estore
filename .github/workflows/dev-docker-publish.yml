@@ -38,7 +38,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-$(date +'%Y-%m-%d_%H-%M-%S')
+        name: licenses_check-$(format('%Y-%m-%d_%H-%M-%S', github.run_started))
         path: "licenses_check/*.csv"
 
       #  build-job:
