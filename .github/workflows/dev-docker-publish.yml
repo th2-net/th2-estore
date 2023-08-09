@@ -31,8 +31,15 @@ jobs:
       run: ./check_licenses.sh java
       shell: bash
 
-    - name: Check results
-      run: find licenses_check -type f -exec cat {} \;
+    # - name: Uploading results
+    #   run: |
+    #     zip -r licenses_check.zip licenses_check
+    - name: Uploading results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: licenses_check-$(date +'%Y-%m-%d_%H-%M-%S')
+        path: "licenses_check/*.log"
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
