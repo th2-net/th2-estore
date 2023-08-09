@@ -39,7 +39,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: licenses_check-$(date +'%Y-%m-%d_%H-%M-%S')
-        path: "licenses_check/*.log"
+        path: "licenses_check/*.csv"
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
