@@ -20,11 +20,15 @@ jobs:
     #     ref: th2-1836-json-files-update
     - name: get license check script
       run: |
+        mkdir script
+        cd script
         git clone git@github.com:th2-net/.github.git
         cd .github
         git checkout th2-1836-json-files-update
     - name: Run check_licenses script
-      run: ./license-compliance/check_licenses.sh java
+      run: |
+        cd ../../
+        ./license-compliance/check_licenses.sh java
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
