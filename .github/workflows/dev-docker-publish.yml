@@ -31,14 +31,14 @@ jobs:
       run: ./check_licenses.sh java
       shell: bash
 
-    # - name: Uploading results
-    #   run: |
-    #     zip -r licenses_check.zip licenses_check
+    - name: Set timestamp environment variable
+      run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
+    
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-$(format('%Y-%m-%d_%H-%M-%S', github.run_started))
+        name: licenses_check-$TIMESTAMP
         path: "licenses_check/*.csv"
 
       #  build-job:
