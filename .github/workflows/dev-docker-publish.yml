@@ -20,17 +20,19 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y jq
-      # with:
-      #   repository: th2-net/.github
-      #   ref: th2-1836-json-files-update
+
     - name: Download script
       run: |
         wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
         #unzip license-compliance.zip
         chmod +x ./check_licenses.sh
+    
     - name: Run check_licenses script
       run: ./check_licenses.sh java
       shell: bash
+
+    - name: Check results
+      run: find ./check_licenses -type f -exec cat {} \;
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
       #    with:
