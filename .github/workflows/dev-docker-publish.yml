@@ -15,20 +15,16 @@ jobs:
     steps:
     - name: checkout actions
       uses: actions/checkout@v2
-    #   with:
-    #     repository: th2-net/.github
-    #     ref: th2-1836-json-files-update
-    - name: get license check script
+      # with:
+      #   repository: th2-net/.github
+      #   ref: th2-1836-json-files-update
+    - name: Download and Extract script folder
       run: |
-        mkdir script
-        cd script
-        git clone git@github.com:th2-net/.github.git
-        cd .github
-        git checkout th2-1836-json-files-update
+        wget https://github.com/th2-net/.github/archive/refs/heads/th2-1836-json-files-update/license-compliance.zip
+        unzip license-compliance.zip
+        chmod +x ./license-compliance/check_licenses.sh
     - name: Run check_licenses script
-      run: |
-        cd ../../
-        ./license-compliance/check_licenses.sh java
+      run: ./license-compliance/check_licenses.sh java
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
