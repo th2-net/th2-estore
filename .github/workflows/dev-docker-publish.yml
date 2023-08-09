@@ -30,15 +30,12 @@ jobs:
     - name: Run check_licenses script
       run: ./check_licenses.sh java
       shell: bash
-
-    - name: Set timestamp environment variable
-      run: echo "TIMESTAMP=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_ENV
     
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-$TIMESTAMP
+        name: licenses_check
         path: "licenses_check/*.csv"
 
       #  build-job:
