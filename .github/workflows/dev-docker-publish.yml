@@ -13,22 +13,13 @@ jobs:
   check_licenses:
     runs-on: ubuntu-latest
     steps:
-    - name: create jq evnironment
-      uses: sergeysova/jq-action@v2
     - name: checkout actions
       uses: actions/checkout@v2
+      with:
+        repository: th2-net/.github
+        ref: th2-1836-json-files-update
     - name: Run check_licenses script
       run: ./license-compliance/check_licenses.sh java
-
-    # runs-on: ubuntu-latest
-    # steps:
-    # - name: checkout actions
-    #   uses: actions/checkout@v2
-    #   with:
-    #     repository: th2-net/.github
-    #     ref: th2-1836-json-files-update
-    # - name: Run check_licenses script
-    #   run: ./license-compliance/check_licenses.sh java
   build-job:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
