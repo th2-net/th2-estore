@@ -32,7 +32,9 @@ jobs:
       shell: bash
 
     - name: Check results
-      run: find ./check_licenses -type f -exec cat {} \;
+      run: |
+        ls -l
+        find check_licenses -type f -exec cat {} \;
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
       #    with:
