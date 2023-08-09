@@ -15,9 +15,14 @@ jobs:
     steps:
     - name: checkout actions
       uses: actions/checkout@v2
-      with:
-        repository: th2-net/.github
-        ref: th2-1836-json-files-update
+    #   with:
+    #     repository: th2-net/.github
+    #     ref: th2-1836-json-files-update
+    - name: get license check script
+      run: |
+        clone git@github.com:th2-net/.github.git
+        cd .github
+        git checkout th2-1836-json-files-update
     - name: Run check_licenses script
       run: ./license-compliance/check_licenses.sh java
   build-job:
