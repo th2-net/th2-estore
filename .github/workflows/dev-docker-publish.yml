@@ -34,8 +34,8 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check
-        path: licenses_check/*
+        name: licenses_check-${applicationName}
+        path: ./licenses_check/
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
