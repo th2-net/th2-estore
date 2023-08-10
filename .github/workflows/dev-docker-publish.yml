@@ -42,7 +42,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-$APP_NAME:$VERSION
+        name: licenses_check-$APP_NAME-$VERSION
         path: ./licenses_check/
 
       #  build-job:
