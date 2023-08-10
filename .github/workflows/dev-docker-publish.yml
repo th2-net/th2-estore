@@ -24,7 +24,6 @@ jobs:
     - name: Download script
       run: |
         wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
-        #unzip license-compliance.zip
         chmod +x ./check_licenses.sh
     
     - name: Run check_licenses script
@@ -36,7 +35,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: licenses_check
-        path: "licenses_check/*.csv"
+        path: licenses_check/*
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
