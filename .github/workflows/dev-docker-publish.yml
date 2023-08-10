@@ -9,6 +9,10 @@ on:
     paths-ignore:
       - README.md
 
+env:
+        APP_NAME: ${{ github.repository }}
+        BRANCH: ${{ github.ref }}
+
 jobs:
   check_licenses:
     runs-on: ubuntu-latest
@@ -29,12 +33,16 @@ jobs:
     - name: Run check_licenses script
       run: ./check_licenses.sh java
       shell: bash
-    
+
+    - name: Get version
+      run:
+        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')              
+
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-${{ applicationName }}
+        name: licenses_check-${{ APP_NAME }}:${{ VERSION }}
         path: ./licenses_check/
 
       #  build-job:
