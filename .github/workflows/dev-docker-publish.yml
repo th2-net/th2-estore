@@ -34,7 +34,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-${applicationName}
+        name: licenses_check-${{ applicationName }}
         path: ./licenses_check/
 
       #  build-job:
