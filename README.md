@@ -74,8 +74,8 @@ Please see more details about this feature via [link](https://github.com/th2-net
 # Changes
 
 ## 5.2.0
-* bom: `4.5.0-dev`
-* common: `5.4.0-dev`
+* Updated bom: `4.5.0-dev`
+* Updated common: `5.4.0-dev`
 
 ## 5.1.0
 
