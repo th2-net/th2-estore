@@ -1,15 +1,21 @@
+import com.github.jk1.license.filter.LicenseBundleNormalizer
+import com.github.jk1.license.render.JsonReportRenderer
+
 plugins {
     id 'java'
+    id "io.github.gradle-nexus.publish-plugin" version "1.0.0"
+    id 'maven-publish'
+    id 'signing'
     id 'java-library'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.1.2"
+    id "org.owasp.dependencycheck" version "8.2.1"
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id "de.undercouch.download" version "5.4.0"
 }
 
 ext {
-    junitJupiterEngineVersion   = '5.4.0'
-    cradleVersion               = '5.0.1-dev-version-5-4797213397-fa1321e-SNAPSHOT'
-    commonVersion               = '5.2.0'
+    cradleVersion = '5.1.1-dev'
 }
 
 group = 'com.exactpro.th2'
@@ -31,22 +37,31 @@ repositories {
         url 'https://s01.oss.sonatype.org/content/repositories/releases/'
     }
 
-    configurations.all {
+    configurations.configureEach {
         resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
         resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
     }
 }
 
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+javadoc {
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
 jar {
     manifest {
         attributes(
-                'Created-By':               "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
-                'Specification-Title':      '',
-                'Specification-Vendor':     'Exactpro Systems LLC',
-                'Implementation-Title':     project.archivesBaseName,
-                'Implementation-Vendor':    'Exactpro Systems LLC',
+                'Created-By': "${System.getProperty('java.version')} (${System.getProperty('java.vendor')})",
+                'Specification-Title': '',
+                'Specification-Vendor': 'Exactpro Systems LLC',
+                'Implementation-Title': project.archivesBaseName,
+                'Implementation-Vendor': 'Exactpro Systems LLC',
                 'Implementation-Vendor-Id': 'com.exactpro',
-                'Implementation-Version':   project.version
+                'Implementation-Version': project.version
         )
     }
 }
@@ -58,19 +73,109 @@ configurations.configureEach {
     }
 }
 
+// conditionals for publications
+tasks.withType(PublishToMavenRepository).configureEach {
+    onlyIf {
+        (repository == publishing.repositories.nexus &&
+                project.hasProperty('nexus_user') &&
+                project.hasProperty('nexus_password') &&
+                project.hasProperty('nexus_url')) ||
+                (repository == publishing.repositories.sonatype &&
+                        project.hasProperty('sonatypeUsername') &&
+                        project.hasProperty('sonatypePassword'))
+    }
+}
+tasks.withType(Sign).configureEach {
+    onlyIf {
+        project.hasProperty('signingKey') &&
+                project.hasProperty('signingPassword')
+    }
+}
+// disable running task 'initializeSonatypeStagingRepository' on a gitlab
+tasks.configureEach { task ->
+    if (task.name.equals('initializeSonatypeStagingRepository') &&
+            !(project.hasProperty('sonatypeUsername') && project.hasProperty('sonatypePassword'))
+    ) {
+        task.enabled = false
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from(components.java)
+            pom {
+                name = rootProject.name
+                packaging = 'jar'
+                description = rootProject.description
+                url = vcs_url
+                scm {
+                    url = vcs_url
+                }
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'developer'
+                        name = 'developer'
+                        email = 'developer@exactpro.com'
+                    }
+                }
+                scm {
+                    url = vcs_url
+                }
+            }
+        }
+    }
+    repositories {
+        //Nexus repo to publish from gitlab
+        maven {
+            name = 'nexus'
+            credentials {
+                username = project.findProperty('nexus_user')
+                password = project.findProperty('nexus_password')
+            }
+            url = project.findProperty('nexus_url')
+        }
+    }
+}
+
+nexusPublishing {
+    repositories {
+        sonatype {
+            nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
+            snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+        }
+    }
+}
+
+signing {
+    String signingKey = findProperty("signingKey")
+    String signingPassword = findProperty("signingPassword")
+    useInMemoryPgpKeys(signingKey, signingPassword)
+    sign publishing.publications.mavenJava
+}
+
 dependencies {
-    api platform('com.exactpro.th2:bom:4.2.0')
+    api platform('com.exactpro.th2:bom:4.5.0')
+    implementation 'com.exactpro.th2:common:5.4.0-dev'
     implementation 'com.exactpro.th2:task-utils:0.1.1'
-    implementation "com.exactpro.th2:common:$commonVersion"
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
+
+    // FIXME: Added as API dependency to common com.exactpro.th2.common.event.Event.toProto(...) throws `JsonProcessingException`
+    implementation 'com.fasterxml.jackson.core:jackson-core'
 
     implementation 'io.prometheus:simpleclient'
     implementation "org.slf4j:slf4j-api"
     implementation "org.jetbrains:annotations"
 
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.2.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.3'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.4.0'
 }
 
 test {
@@ -96,9 +201,9 @@ docker {
 }
 
 dependencyCheck {
-    formats=['SARIF', 'JSON', 'HTML']
-    failBuildOnCVSS=5
-
+    formats = ['SARIF', 'JSON', 'HTML']
+    failBuildOnCVSS = 5
+    suppressionFile = file('suppressions.xml')
     analyzers {
         assemblyEnabled = false
         nugetconfEnabled = false
@@ -108,4 +213,25 @@ dependencyCheck {
 
 dependencyLocking {
     lockAllConfigurations()
+}
+
+licenseReport {
+    def licenseNormalizerBundlePath = "$buildDir/license-normalizer-bundle.json"
+
+    if (!file(licenseNormalizerBundlePath).exists()) {
+        download.run {
+            src 'https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/license-normalizer-bundle.json'
+            dest "$buildDir/license-normalizer-bundle.json"
+            overwrite false
+        }
+    }
+
+    filters = [
+            new LicenseBundleNormalizer(licenseNormalizerBundlePath, false)
+    ]
+    renderers = [
+            new JsonReportRenderer('licenses.json', false),
+    ]
+    excludeOwnGroup = false
+    allowedLicensesFile = new URL("https://raw.githubusercontent.com/th2-net/.github/main/license-compliance/gradle-license-report/allowed-licenses.json")
 }
