@@ -51,14 +51,17 @@ jobs:
         output=$(cat ./licenses_check/failed_licenses.csv)
         if [[ -n "$output" ]]; then
           echo "Workflow failed due to faulty certificates"
-          echo "Failure"
+          exit 1
         else
           echo "All certificates are valid"
           echo "Success"
+          exit 0
         fi
 
     - name: Set workflow status
-      run: echo "::set-output name=status::${{ steps.set_status.outputs.value }}"
+      run: echo "::set-output name=status::Failure"
+      if: steps.set_status.outputs.result == 'Workflow failed due to faulty certificates'
+      continue-on-error: false
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
