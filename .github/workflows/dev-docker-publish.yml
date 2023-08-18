@@ -33,22 +33,6 @@ jobs:
     - name: Run check_licenses script
       run: ./check_licenses.sh java
       id: run_script
-    
-    - name: Run check_licenses script
-      run: |
-        output=$(cat ${{ steps.run_script.outputs.run-result }})
-        echo "$output"
-        if [[ "$output" == *"Result = ***FAILED***"* ]]; then
-          echo "Workflow failed due to faulty certificates"
-          echo "Failure"
-        else
-          echo "All certificates are valid"
-          echo "Success"
-        fi
-      id: set_status
-
-    - name: Set workflow status
-      run: echo "::set-output name=status::${{ steps.set_status.outputs.value }}"
 
     - name: Get version
       run:
@@ -60,6 +44,21 @@ jobs:
       with:
         name: licenses_check-$APP_NAME-$VERSION
         path: ./licenses_check/
+    
+    - name: Determine workflow status
+      id: set_status
+      run: |
+        output=$(cat ./licenses_check/failed_licenses.csv)
+        if [[ -n "$output" ]]; then
+          echo "Workflow failed due to faulty certificates"
+          echo "Failure"
+        else
+          echo "All certificates are valid"
+          echo "Success"
+        fi
+
+    - name: Set workflow status
+      run: echo "::set-output name=status::${{ steps.set_status.outputs.value }}"
 
       #  build-job:
       #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
