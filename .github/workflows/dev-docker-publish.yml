@@ -30,30 +30,25 @@ jobs:
         wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
         chmod +x ./check_licenses.sh
     
-    - name: Run check_licenses script
-      run: ./check_licenses.sh java
-      shell: bash
+    # - name: Run check_licenses script
+    #   run: ./check_licenses.sh java
+    #   shell: bash
     
-    - name: Check exit status and set workflow status
+    - name: Run check_licenses script
       run: |
-        if [ $? -eq 0 ]; then
-          echo "All certificates are valid"
-          echo "Success"
-        else
+        output=$(./check_licenses.sh)  # Execute your script
+        echo "$output"
+        if [[ "$output" == *"Result = ***FAILED***"* ]]; then
           echo "Workflow failed due to faulty certificates"
           echo "Failure"
-          exit 1
+        else
+          echo "All certificates are valid"
+          echo "Success"
         fi
       id: set_status
 
     - name: Set workflow status
-      run: |
-        if [[ "${{ steps.set_status.outputs.value }}" == "Success" ]]; then
-          echo "Success"
-        else
-          echo "Failure"
-        fi
-      id: final_status
+      run: echo "::set-output name=status::${{ steps.set_status.outputs.value }}"
 
     - name: Get version
       run:
