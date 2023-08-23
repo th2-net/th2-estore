@@ -1,4 +1,4 @@
-name: Dev build and publish Docker distributions to Github Container Registry ghcr.io
+name: Check licenses
 
 on:
   push:
