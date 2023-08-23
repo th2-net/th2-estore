@@ -48,8 +48,8 @@ jobs:
     - name: Determine workflow status
       id: set_status
       run: |
-        output=$(cat ./licenses_check/failed_licenses.csv)
-        if [[ -n "$output" ]]; then
+        line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
+        if [[ $line_count -gt 1 ]]; then
           echo "Workflow failed due to faulty certificates"
           exit 1
         else
