@@ -14,59 +14,10 @@ env:
         BRANCH: ${{ github.ref }}
 
 jobs:
-  check_licenses:
-    runs-on: ubuntu-latest
-    steps:
-    - name: checkout actions
-      uses: actions/checkout@v2
-
-    - name: Install jq env
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq
-
-    - name: Download script
-      run: |
-        wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
-        chmod +x ./check_licenses.sh
-    
-    - name: Run check_licenses script
-      run: ./check_licenses.sh java
-      id: run_script
-
-    - name: Get version
-      run:
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')              
-
-    - name: Uploading results
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: licenses_check-$APP_NAME-$VERSION
-        path: ./licenses_check/
-    
-    - name: Determine workflow status
-      id: set_status
-      run: |
-        output=$(cat ./licenses_check/failed_licenses.csv)
-        if [[ -n "$output" ]]; then
-          echo "Workflow failed due to faulty certificates"
-          exit 1
-        else
-          echo "All certificates are valid"
-          echo "Success"
-          exit 0
-        fi
-
-    - name: Set workflow status
-      run: echo "::set-output name=status::Failure"
-      if: steps.set_status.outputs.result == 'Workflow failed due to faulty certificates'
-      continue-on-error: false
-
-      #  build-job:
-      #    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
-      #    with:
-      #      build-target: 'Docker'
-      #      docker-username: ${{ github.actor }}
-      #    secrets:
-      #      docker-password: ${{ secrets.GITHUB_TOKEN }}
+  build-job:
+    uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
+    with:
+      build-target: 'Docker'
+      docker-username: ${{ github.actor }}
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}
