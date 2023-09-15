@@ -162,7 +162,7 @@ signing {
 
 dependencies {
     api platform('com.exactpro.th2:bom:4.5.0')
-    implementation 'com.exactpro.th2:common:5.4.0-dev'
+    implementation 'com.exactpro.th2:common:5.4.2-dev'
     implementation 'com.exactpro.th2:task-utils:0.1.1'
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
