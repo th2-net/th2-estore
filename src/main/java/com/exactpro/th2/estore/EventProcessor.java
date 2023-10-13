@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -37,7 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -49,15 +48,18 @@ import static java.util.Objects.requireNonNull;
 public class EventProcessor implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventProcessor.class);
     private static final String[] ATTRIBUTES = {QueueAttribute.SUBSCRIBE.toString(), QueueAttribute.EVENT.toString()};
+    private final ErrorCollector errorCollector;
     private final MessageRouter<EventBatch> router;
     private final CradleEntitiesFactory entitiesFactory;
     private final Persistor<TestEventToStore> persistor;
     private SubscriberMonitor monitor;
     private final EventProcessorMetrics metrics;
 
-    public EventProcessor(@NotNull MessageRouter<EventBatch> router,
+    public EventProcessor(@NotNull ErrorCollector errorCollector,
+                          @NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleEntitiesFactory entitiesFactory,
                           @NotNull Persistor<TestEventToStore> persistor) {
+        this.errorCollector = requireNonNull(errorCollector, "Error collector can't be null");
         this.router = requireNonNull(router, "Message router can't be null");
         this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle entity factory can't be null");
         this.persistor = persistor;
@@ -73,7 +75,7 @@ public class EventProcessor implements AutoCloseable {
                     ATTRIBUTES);
 
             if (monitor == null) {
-                LOGGER.error("Cannot find queues for subscribe");
+                errorCollector.collect(LOGGER, "Cannot find queues for subscribe", null);
                 throw new RuntimeException("Cannot find queues for subscribe");
             }
             LOGGER.info("RabbitMQ subscribing was successful");
@@ -102,7 +104,7 @@ public class EventProcessor implements AutoCloseable {
             try {
                 monitor.unsubscribe();
             } catch (Exception e) {
-                LOGGER.error("Cannot unsubscribe from queues", e);
+                errorCollector.collect(LOGGER, "Cannot unsubscribe from queues", e);
             }
         }
     }
@@ -118,32 +120,17 @@ public class EventProcessor implements AutoCloseable {
 
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
-        final int eventCount = events.size();
-        final AtomicBoolean responded = new AtomicBoolean(false);
-        final Map<TestEventToStore, TestEventToStore> completed = new ConcurrentHashMap<>();
-
-        Callback<TestEventToStore> persistorCallback = new Callback<>() {
-            @Override
-            public void onSuccess(TestEventToStore persistedEvent) {
-                completed.put(persistedEvent, persistedEvent);
-                if (completed.size() == eventCount)
-                    checkAndRespond(responded, () -> confirm(confirmation));
-            }
-
-            @Override
-            public void onFail(TestEventToStore persistedEvent) {
-                checkAndRespond(responded, () -> reject(confirmation));
-                if (persistedEvent != null)
-                    completed.put(persistedEvent, persistedEvent);
-            }
-        };
+        Callback<TestEventToStore> persistorCallback = new ProcessorCallback(confirmation, events.size());
 
         events.forEach((event) -> {
             try {
                 TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
                 persist(cradleEventSingle, persistorCallback);
             } catch (Exception e) {
-                LOGGER.error("Failed to process single event'{}'", shortDebugString(event), e);
+                errorCollector.collect("Failed to process a single event");
+                if (LOGGER.isErrorEnabled()) {
+                    LOGGER.error("Failed to process single event '{}'", shortDebugString(event), e);
+                }
                 persistorCallback.onFail(null);
                 metrics.registerFailure();
             }
@@ -168,29 +155,32 @@ public class EventProcessor implements AutoCloseable {
             });
 
         } catch (Exception e) {
-            LOGGER.error("Failed to process event batch '{}'", shortDebugString(eventBatch), e);
+            errorCollector.collect("Failed to process an event batch");
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Failed to process event batch '{}'", shortDebugString(eventBatch), e);
+            }
             reject(confirmation);
             metrics.registerFailure();
         }
     }
 
 
-    private static boolean confirm(Confirmation confirmation) {
+    private boolean confirm(Confirmation confirmation) {
         try {
             confirmation.confirm();
         } catch (Exception e) {
-            LOGGER.error("Exception confirming message", e);
+            errorCollector.collect(LOGGER, "Exception confirming message", e);
             return false;
         }
         return true;
     }
 
 
-    private static boolean reject(Confirmation confirmation) {
+    private boolean reject(Confirmation confirmation) {
         try {
             confirmation.reject();
         } catch (Exception e) {
-            LOGGER.error("Exception rejecting message", e);
+            errorCollector.collect(LOGGER, "Exception rejecting message", e);
             return false;
         }
         return true;
@@ -198,11 +188,8 @@ public class EventProcessor implements AutoCloseable {
 
 
     private void persist(TestEventToStore data, Callback<TestEventToStore> callback) throws Exception {
-        Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
-        try {
+        try (Histogram.Timer ignored = metrics.startMeasuringPersistenceLatency()) {
             persistor.persist(data, callback);
-        } finally {
-            timer.observeDuration();
         }
     }
 
@@ -234,7 +221,7 @@ public class EventProcessor implements AutoCloseable {
                         new BookId(protoEventBatch.getParentEventId().getBookName()),
                         protoEventBatch.getParentEventId().getScope(),
                         StorageUtils.toInstant(ProtoUtil.getMinStartTimestamp(protoEventBatch.getEventsList())),
-                        UUID.randomUUID().toString()
+                        Util.generateId()
                 )
                 .parentId(ProtoUtil.toCradleEventID(protoEventBatch.getParentEventId()))
                 .build();
@@ -242,5 +229,33 @@ public class EventProcessor implements AutoCloseable {
             cradleEventBatch.addTestEvent(toCradleEvent(protoEvent));
         }
         return cradleEventBatch;
+    }
+
+    private class ProcessorCallback implements Callback<TestEventToStore> {
+        private final AtomicBoolean responded = new AtomicBoolean(false);
+        private final Map<TestEventToStore, TestEventToStore> completed = new ConcurrentHashMap<>();
+        private final Confirmation confirmation;
+        private final int eventCount;
+
+        public ProcessorCallback(Confirmation confirmation, int eventCount) {
+            this.eventCount = eventCount;
+            this.confirmation = confirmation;
+        }
+
+        @Override
+        public void onSuccess(TestEventToStore persistedEvent) {
+            completed.put(persistedEvent, persistedEvent);
+            if (completed.size() == eventCount) {
+                checkAndRespond(responded, () -> confirm(confirmation));
+            }
+        }
+
+        @Override
+        public void onFail(TestEventToStore persistedEvent) {
+            checkAndRespond(responded, () -> reject(confirmation));
+            if (persistedEvent != null) {
+                completed.put(persistedEvent, persistedEvent);
+            }
+        }
     }
 }

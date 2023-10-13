@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,8 +15,18 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
-import com.exactpro.cradle.testevents.*;
-import com.exactpro.th2.common.grpc.*;
+import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
+import com.exactpro.cradle.testevents.StoredTestEventId;
+import com.exactpro.cradle.testevents.TestEventBatchToStore;
+import com.exactpro.cradle.testevents.TestEventSingle;
+import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.testevents.TestEventToStore;
+import com.exactpro.th2.common.grpc.ConnectionID;
+import com.exactpro.th2.common.grpc.Direction;
+import com.exactpro.th2.common.grpc.Event;
+import com.exactpro.th2.common.grpc.EventBatch;
+import com.exactpro.th2.common.grpc.EventID;
+import com.exactpro.th2.common.grpc.MessageID;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.exactpro.th2.common.schema.message.MessageRouter;
 import org.jetbrains.annotations.NotNull;
@@ -26,16 +36,29 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 import static com.exactpro.th2.common.event.Event.start;
 import static com.exactpro.th2.common.event.EventUtils.toEventID;
+import static com.exactpro.th2.common.message.MessageUtils.toTimestamp;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
+@SuppressWarnings("unchecked")
 public class TestEventProcessor {
     private static final int MAX_MESSAGE_BATCH_SIZE = 1024*1024;
     private static final int MAX_TEST_EVENT_BATCH_SIZE = 1024*1024;
@@ -49,14 +72,15 @@ public class TestEventProcessor {
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
     private final Confirmation confirmation = mock(Confirmation.class);
+    private final ErrorCollector errorCollector = mock(ErrorCollector.class);
 
     private EventProcessor eventStore;
     private CradleEntitiesFactory cradleEntitiesFactory;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE, STORE_ACTION_REJECTION_THRESHOLD));
-        eventStore = spy(new EventProcessor(routerMock, cradleEntitiesFactory, persistorMock));
+        eventStore = spy(new EventProcessor(errorCollector, routerMock, cradleEntitiesFactory, persistorMock));
     }
 
     @Test
@@ -343,7 +367,7 @@ public class TestEventProcessor {
 //        for (int i = 0; i < expected.getAttachedMessageIdsList().size(); i++) {
 //            var expectedId = expected.getAttachedMessageIdsList().get(i);
 //            var actualId = actualIds.get(i);
-//            Assertions.assertEquals(expectedId.getTimestamp(), MessageUtils.toTimestamp(actualId.getTimestamp()));
+//            assertEquals(expectedId.getTimestamp(), toTimestamp(actualId.getTimestamp()));
 //        }
 
         assertEquals(
@@ -386,7 +410,7 @@ public class TestEventProcessor {
                 .setDirection(Direction.forNumber(RANDOM.nextInt(2)))
                 .setSequence(Math.abs(RANDOM.nextLong()))
                 .setBookName(parentId.getBookName())
-                .setTimestamp(com.exactpro.th2.common.message.MessageUtils.toTimestamp(Date.from(Instant.now())))
+                .setTimestamp(toTimestamp(Date.from(Instant.now())))
                 .build();
     }
 }

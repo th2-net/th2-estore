@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -16,17 +16,24 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.th2.common.metrics.CommonMetrics;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class EventStore {
+import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
 
+public class EventStore {
     private static final Logger LOGGER = LoggerFactory.getLogger(EventStore.class);
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("error-collector-%d").build();
 
     public static void main(String[] args) {
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
@@ -41,19 +48,27 @@ public class EventStore {
             resources.add(factory);
 
             Configuration config = factory.getCustomConfiguration(Configuration.class);
-            if (config == null)
+            if (config == null) {
                 config = new Configuration();
+            }
 
             LOGGER.info("Effective configuration:\n{}", config);
 
             CradleManager cradleManager = factory.getCradleManager();
             resources.add(cradleManager);
 
-            EventPersistor persistor = new EventPersistor(config, cradleManager.getStorage());
+            ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
+            resources.add(() -> shutdownGracefully(executor, 5, TimeUnit.SECONDS));
+
+            ErrorCollector errorCollector = new ErrorCollector(executor, cradleManager.getStorage().getEntitiesFactory(), factory.getRootEventId());
+            resources.add(errorCollector);
+
+            EventPersistor persistor = new EventPersistor(errorCollector, config, cradleManager.getStorage());
             resources.add(persistor);
             persistor.start();
+            errorCollector.init(persistor);
 
-            EventProcessor processor = new EventProcessor(factory.getEventBatchRouter(),
+            EventProcessor processor = new EventProcessor(errorCollector, factory.getEventBatchRouter(),
                     cradleManager.getStorage().getEntitiesFactory(),
                     persistor);
             resources.add(processor);

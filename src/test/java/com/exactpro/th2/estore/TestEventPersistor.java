@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,7 +18,13 @@ import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.Direction;
 import com.exactpro.cradle.messages.StoredMessageId;
-import com.exactpro.cradle.testevents.*;
+import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
+import com.exactpro.cradle.testevents.StoredTestEventId;
+import com.exactpro.cradle.testevents.TestEventBatchToStore;
+import com.exactpro.cradle.testevents.TestEventSingle;
+import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
+import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.taskutils.StartableRunnable;
 import org.junit.jupiter.api.AfterEach;
@@ -34,14 +40,29 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.after;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@SuppressWarnings("SameParameterValue")
 public class TestEventPersistor {
 
     private static final int  MAX_MESSAGE_BATCH_SIZE      = 16 * 1024;
@@ -59,6 +80,7 @@ public class TestEventPersistor {
 
     private final ThreadLocalRandom random = ThreadLocalRandom.current();
     private final CradleStorage storageMock = mock(CradleStorage.class);
+    private final ErrorCollector errorCollector = mock(ErrorCollector.class);
 
     @SuppressWarnings("unchecked")
     private final Callback<TestEventToStore> callback = mock(Callback.class);
@@ -72,7 +94,7 @@ public class TestEventPersistor {
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
         Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, MAX_EVENT_QUEUE_DATA_SIZE);
-        persistor = spy(new EventPersistor(config, storageMock));
+        persistor = spy(new EventPersistor(errorCollector, config, storageMock));
         persistor.start();
     }
 
@@ -84,7 +106,7 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("single event persistence")
-    public void testSingleEvent() throws IOException, CradleStorageException {
+    public void testSingleEvent() throws IOException, CradleStorageException, InterruptedException {
 
         BookId bookId = new BookId(BOOK_NAME);
         Instant timestamp = Instant.now();
@@ -93,7 +115,7 @@ public class TestEventPersistor {
         TestEventSingleToStore event = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
         persistor.persist(event, callback);
 
-        pause(EVENT_PERSIST_TIMEOUT);
+        Thread.sleep(EVENT_PERSIST_TIMEOUT);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(1)).processTask(any());
@@ -108,12 +130,12 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("event batch persistence")
-    public void testEventBatch() throws IOException, CradleStorageException {
+    public void testEventBatch() throws IOException, CradleStorageException, InterruptedException {
 
         TestEventBatchToStore eventBatch = createEventBatch1();
         persistor.persist(eventBatch, callback);
 
-        pause(EVENT_PERSIST_TIMEOUT * 2);
+        Thread.sleep(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(1)).processTask(any());
@@ -129,7 +151,7 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("failed event is retried")
-    public void testEventResubmitted() throws IOException, CradleStorageException {
+    public void testEventResubmitted() throws IOException, CradleStorageException, InterruptedException {
 
         when(storageMock.storeTestEventAsync(any()))
                 .thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")))
@@ -138,7 +160,7 @@ public class TestEventPersistor {
         TestEventBatchToStore eventBatch = createEventBatch1();
         persistor.persist(eventBatch, callback);
 
-        pause(EVENT_PERSIST_TIMEOUT * 2);
+        Thread.sleep(EVENT_PERSIST_TIMEOUT * 2);
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(2)).processTask(any());
@@ -153,7 +175,7 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("failed event is retried limited times")
-    public void testEventResubmittedLimitedTimes() throws IOException, CradleStorageException {
+    public void testEventResubmittedLimitedTimes() throws IOException, CradleStorageException, InterruptedException {
 
         OngoingStubbing<CompletableFuture<Void>> os = when(storageMock.storeTestEventAsync(any()));
         for (int i = 0; i <= MAX_EVENT_PERSIST_RETRIES; i++)
@@ -163,7 +185,7 @@ public class TestEventPersistor {
         TestEventToStore eventBatch = createEventBatch1();
         persistor.persist(eventBatch, callback);
 
-        pause(EVENT_PERSIST_TIMEOUT * (MAX_EVENT_PERSIST_RETRIES + 1));
+        Thread.sleep(EVENT_PERSIST_TIMEOUT * (MAX_EVENT_PERSIST_RETRIES + 1));
 
         ArgumentCaptor<TestEventToStore> capture = ArgumentCaptor.forClass(TestEventToStore.class);
         verify(persistor, times(MAX_EVENT_PERSIST_RETRIES + 1)).processTask(any());
@@ -179,7 +201,7 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("Event persistence is queued by count")
-    public void testEventCountQueueing() throws IOException, CradleStorageException, InterruptedException {
+    public void testEventCountQueueing() throws IOException, CradleStorageException {
 
         final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
         final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 5;
@@ -209,14 +231,13 @@ public class TestEventPersistor {
         verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
         verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
-        executor.shutdown();
-        executor.awaitTermination(0, TimeUnit.MILLISECONDS);
+        shutdownGracefully(executor, 1, TimeUnit.SECONDS);
     }
 
 
     @Test
     @DisplayName("Event persistence is queued by event sizes")
-    public void testEventSizeQueueing() throws IOException, InterruptedException, CradleStorageException {
+    public void testEventSizeQueueing() throws IOException, CradleStorageException {
 
         final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
         final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 6;
@@ -257,8 +278,7 @@ public class TestEventPersistor {
         verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
         verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
-        executor.shutdown();
-        executor.awaitTermination(0, TimeUnit.MILLISECONDS);
+        shutdownGracefully(executor, 1, TimeUnit.SECONDS);
     }
 
 
@@ -279,6 +299,7 @@ public class TestEventPersistor {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
