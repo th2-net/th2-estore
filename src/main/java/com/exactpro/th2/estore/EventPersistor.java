@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -24,6 +24,7 @@ import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import com.exactpro.th2.taskutils.FutureTracker;
 import com.exactpro.th2.taskutils.RetryScheduler;
 import com.exactpro.th2.taskutils.ScheduledRetryableTask;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -33,14 +34,17 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
+import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
 import static java.util.Objects.requireNonNull;
 
 public class EventPersistor implements Runnable, Persistor<TestEventToStore>, AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("persistor-service-%d").build();
 
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<PersistenceTask> taskQueue;
@@ -51,24 +55,32 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
     private final EventPersistorMetrics<PersistenceTask> metrics;
     private final ScheduledExecutorService samplerService;
+    private final ErrorCollector errorCollector;
 
-    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorage) {
-        this(config, cradleStorage, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
+    public EventPersistor(@NotNull ErrorCollector errorCollector,
+                          @NotNull Configuration config,
+                          @NotNull CradleStorage cradleStorage) {
+        this(errorCollector, config, cradleStorage, (r) -> config.getRetryDelayBase() * 1_000_000 * (r + 1));
     }
 
-    public EventPersistor(@NotNull Configuration config, @NotNull CradleStorage cradleStorage, RetryScheduler scheduler) {
+    public EventPersistor(@NotNull ErrorCollector errorCollector,
+                          @NotNull Configuration config,
+                          @NotNull CradleStorage cradleStorage,
+                          RetryScheduler scheduler) {
+        this.errorCollector = requireNonNull(errorCollector, "Error collector can't be null");
         this.maxTaskRetries = config.getMaxRetryCount();
         this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
-        this.samplerService = Executors.newSingleThreadScheduledExecutor();
+        this.samplerService = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
     }
 
 
     public void start() throws InterruptedException {
         this.stopped = false;
         synchronized (signal) {
+            // FIXME: control resource
             new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
             signal.wait();
         }
@@ -104,9 +116,10 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         }
     }
 
-    private void logAndFail(ScheduledRetryableTask<PersistenceTask> task, String logMessage, Throwable e) {
+    private void logAndFail(ScheduledRetryableTask<PersistenceTask> task, String errorKey, String logMessage, Throwable e) {
         taskQueue.complete(task);
         metrics.registerAbortedPersistence();
+        errorCollector.collect(errorKey);
         LOGGER.error(logMessage, e);
         task.getPayload().fail();
     }
@@ -114,7 +127,8 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
         if (e instanceof BookNotFoundException || e instanceof PageNotFoundException) {
             // If following exceptions were thrown there's no point in retrying
-            logAndFail(task, String.format("Can't retry after %s exception", e.getClass().getSimpleName()), e);
+            String message = String.format("Can't retry after %s exception", e.getClass().getSimpleName());
+            logAndFail(task, message, message, e);
         } else {
             logAndRetry(task, e);
         }
@@ -156,13 +170,9 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
             futures.awaitRemaining();
             LOGGER.info("All waiting futures are completed");
         } catch (Exception ex) {
-            LOGGER.error("Cannot await all futures are finished", ex);
+            errorCollector.collect(LOGGER, "Cannot await all futures are finished", ex);
         }
-        try {
-            samplerService.shutdown();
-            samplerService.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-        }
+        shutdownGracefully(samplerService, 1, TimeUnit.MINUTES);
     }
 
 
@@ -198,7 +208,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         final TestEventToStore eventBatch = persistenceTask.eventBatch;
 
         if (task.getRetriesLeft() > 0) {
-
+            errorCollector.collect("Failed to store an event batch, rescheduling");
             LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
                     eventBatch.getId(),
                     task.getRetriesLeft(),
@@ -208,6 +218,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
         } else {
             logAndFail(task,
+                    "Failed to store an event batch, aborting after several executions",
                     String.format("Failed to store the event batch id '%s', aborting after %d executions",
                             eventBatch.getId(),
                             retriesDone),
