@@ -109,15 +109,6 @@ public class EventProcessor implements AutoCloseable {
         }
     }
 
-
-    private void checkAndRespond(AtomicBoolean responded, Supplier<Boolean> confirmationFunction) {
-        synchronized(responded) {
-            if (!responded.get())
-                responded.set(confirmationFunction.get());
-        }
-    }
-
-
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
         Callback<TestEventToStore> persistorCallback = new ProcessorCallback(confirmation, events.size());
@@ -255,6 +246,13 @@ public class EventProcessor implements AutoCloseable {
             checkAndRespond(responded, () -> reject(confirmation));
             if (persistedEvent != null) {
                 completed.put(persistedEvent, persistedEvent);
+            }
+        }
+
+        private void checkAndRespond(AtomicBoolean responded, Supplier<Boolean> confirmationFunction) {
+            synchronized(responded) {
+                if (!responded.get())
+                    responded.set(confirmationFunction.get());
             }
         }
     }
