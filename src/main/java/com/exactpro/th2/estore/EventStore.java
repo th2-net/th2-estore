@@ -111,6 +111,7 @@ public class EventStore {
                 .type("Microservice")
                 .success(true)
                 .endTimestamp(now)
+                .content(new byte[0])
                 .build();
         persistor.persist(eventToStore, new LogCallBack(LOGGER, Level.INFO));
         return rootEventId;
