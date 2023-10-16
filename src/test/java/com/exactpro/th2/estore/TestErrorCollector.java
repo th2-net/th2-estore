@@ -15,11 +15,11 @@
  */
 package com.exactpro.th2.estore;
 
+import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
+import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
 import com.exactpro.cradle.testevents.TestEventToStore;
-import com.exactpro.th2.common.grpc.EventID;
-import com.google.protobuf.util.Timestamps;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +31,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 
+import java.time.Instant;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -63,12 +64,12 @@ class TestErrorCollector {
     @Mock
     private Persistor<TestEventToStore> persistor;
     private final CradleEntitiesFactory entitiesFactory = spy(new CradleEntitiesFactory(1_024^2, 1_024^2, 30_000L));
-    private final EventID rootEvent = EventID.newBuilder()
-            .setBookName("test-book")
-            .setScope("test-scope")
-            .setId("test-id")
-            .setStartTimestamp(Timestamps.now())
-            .build();
+    private final StoredTestEventId rootEvent = new StoredTestEventId(
+            new BookId("test-book"),
+            "test-scope",
+            Instant.now(),
+            "test-id"
+    );
     private ErrorCollector errorCollector;
     @Captor
     private ArgumentCaptor<Runnable> taskCaptor;
@@ -76,8 +77,8 @@ class TestErrorCollector {
     @BeforeEach
     void beforeEach() {
         doReturn(future).when(executor).scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.class));
-        errorCollector = new ErrorCollector(executor, entitiesFactory, rootEvent, PERIOD, TIME_UNIT);
-        errorCollector.init(persistor);
+        errorCollector = new ErrorCollector(executor, entitiesFactory, PERIOD, TIME_UNIT);
+        errorCollector.init(persistor, rootEvent);
         verify(executor).scheduleAtFixedRate(taskCaptor.capture(), eq(PERIOD), eq(PERIOD), eq(TIME_UNIT));
         verifyNoMoreInteractions(executor);
     }
@@ -144,7 +145,7 @@ class TestErrorCollector {
         assertFalse(event.isSuccess());
 
         String body = new String(event.getContent());
-        assertTrue(body.matches("\\{\"errors\":\\{\"A\":\\{\"firstDate\":\"\\d+-\\d+-\\d+T\\d+:\\d+:\\d+.\\d+Z\",\"quantity\":1}}}"), () -> "body: " + body);
+        assertTrue(body.matches("\\[\\{\"errors\":\\{\"A\":\\{\"firstDate\":\"\\d+-\\d+-\\d+T\\d+:\\d+:\\d+.\\d+Z\",\"quantity\":1}}}]"), () -> "body: " + body);
 
         taskCaptor.getValue().run();
     }
@@ -170,6 +171,6 @@ class TestErrorCollector {
         assertFalse(event.isSuccess());
 
         String body = new String(event.getContent());
-        assertTrue(body.matches("\\{\"errors\":\\{\"A\":\\{\"firstDate\":\"\\d+-\\d+-\\d+T\\d+:\\d+:\\d+.\\d+Z\",\"quantity\":1}}}"), () -> "body: " + body);
+        assertTrue(body.matches("\\[\\{\"errors\":\\{\"A\":\\{\"firstDate\":\"\\d+-\\d+-\\d+T\\d+:\\d+:\\d+.\\d+Z\",\"quantity\":1}}}]"), () -> "body: " + body);
     }
 }

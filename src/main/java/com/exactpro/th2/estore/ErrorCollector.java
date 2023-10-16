@@ -17,11 +17,9 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.testevents.StoredTestEventId;
-import com.exactpro.cradle.testevents.TestEventBatchToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.th2.common.event.IBodyData;
-import com.exactpro.th2.common.grpc.EventID;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -29,10 +27,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -46,40 +46,39 @@ import static java.util.Objects.requireNonNull;
 @SuppressWarnings("unused")
 public class ErrorCollector implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ErrorCollector.class);
-    private static final Callback<TestEventToStore> PERSIST_CALL_BACK = new ErrorCollectorCallBack();
+    private static final Callback<TestEventToStore> PERSIST_CALL_BACK = new LogCallBack(LOGGER, Level.TRACE);
     private static final ThreadLocal<ObjectMapper> OBJECT_MAPPER = ThreadLocal.withInitial(() ->
             new ObjectMapper()
                     .registerModule(new JavaTimeModule())
                     // otherwise, type supported by JavaTimeModule will be serialized as array of date component
                     .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                     .setSerializationInclusion(NON_NULL));
+    private static final Persistor<TestEventToStore> DYMMY_PERSISTOR = new DymmyPersistor();
     private final ScheduledFuture<?> drainFuture;
     private final CradleEntitiesFactory entitiesFactory;
-    private final StoredTestEventId rootEvent;
     private final Lock lock = new ReentrantLock();
-    private volatile Persistor<TestEventToStore> persistor;
+    private volatile StoredTestEventId rootEvent;
+    private volatile Persistor<TestEventToStore> persistor = DYMMY_PERSISTOR;
     private Map<String, ErrorMetadata> errors = new HashMap<>();
 
     public ErrorCollector(@NotNull ScheduledExecutorService executor,
                           @NotNull CradleEntitiesFactory entitiesFactory,
-                          @NotNull EventID rootEvent,
                           long period,
                           @NotNull TimeUnit unit) {
         this.entitiesFactory = requireNonNull(entitiesFactory, "Entities factory can't be null");
-        this.rootEvent = ProtoUtil.toCradleEventID(requireNonNull(rootEvent, "Root event can't be null"));
         requireNonNull(unit, "Unit can't be null");
         this.drainFuture = requireNonNull(executor, "Executor can't be null")
                 .scheduleAtFixedRate(this::drain, period, period, unit);
     }
 
     public ErrorCollector(@NotNull ScheduledExecutorService executor,
-                          @NotNull CradleEntitiesFactory entitiesFactory,
-                          @NotNull EventID rootEvent) {
-        this(executor, entitiesFactory, rootEvent, 1, TimeUnit.MINUTES);
+                          @NotNull CradleEntitiesFactory entitiesFactory) {
+        this(executor, entitiesFactory, 1, TimeUnit.MINUTES);
     }
 
-    public void init(@NotNull Persistor<TestEventToStore> persistor) {
+    public void init(@NotNull Persistor<TestEventToStore> persistor, StoredTestEventId rootEvent) {
         this.persistor = requireNonNull(persistor, "Persistor factory can't be null");
+        this.rootEvent = requireNonNull(rootEvent, "Root event id can't be null");
     }
 
     /**
@@ -116,6 +115,10 @@ public class ErrorCollector implements AutoCloseable {
     }
 
     private void drain() {
+        if (rootEvent == null || persistor == DYMMY_PERSISTOR) {
+            LOGGER.warn( "{} isn't initialised", ErrorCollector.class.getSimpleName());
+        }
+
         try {
             Map<String, ErrorMetadata> map = clear();
             if (map.isEmpty()) { return; }
@@ -128,7 +131,8 @@ public class ErrorCollector implements AutoCloseable {
                     .success(false)
                     .parentId(rootEvent)
                     .endTimestamp(now)
-                    .content(OBJECT_MAPPER.get().writeValueAsBytes(new BodyData(map)))
+                    // Content wrapped to list to use the same format as mstore
+                    .content(OBJECT_MAPPER.get().writeValueAsBytes(List.of(new BodyData(map))))
                     .build();
 
             persistor.persist(eventToStore, PERSIST_CALL_BACK);
@@ -193,32 +197,6 @@ public class ErrorCollector implements AutoCloseable {
 
         public void setQuantity(int quantity) {
             this.quantity = quantity;
-        }
-    }
-
-    private static class ErrorCollectorCallBack implements Callback<TestEventToStore> {
-        @Override
-        public void onSuccess(TestEventToStore data) {
-            if (LOGGER.isTraceEnabled()) {
-                if (data.isBatch()) {
-                    TestEventBatchToStore batch = data.asBatch();
-                    LOGGER.trace("Stored the {} test event batch with errors, events: {}, size: {} bytes", batch.getId(), batch.getTestEventsCount(), batch.getBatchSize());
-                } else {
-                    LOGGER.trace("Stored the {} test event with error", data.getId());
-                }
-            }
-        }
-
-        @Override
-        public void onFail(TestEventToStore data) {
-            if (LOGGER.isErrorEnabled()) {
-                if (data.isBatch()) {
-                    TestEventBatchToStore batch = data.asBatch();
-                    LOGGER.trace("Storing of the {} test event batch with errors failed, events: {}, size: {} bytes", batch.getId(), batch.getTestEventsCount(), batch.getBatchSize());
-                } else {
-                    LOGGER.trace("Storing of the {} test event with error failed", data.getId());
-                }
-            }
         }
     }
 

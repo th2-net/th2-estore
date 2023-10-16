@@ -13,13 +13,22 @@
 
 package com.exactpro.th2.estore;
 
+import com.exactpro.cradle.BookId;
+import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.CradleManager;
+import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.testevents.StoredTestEventId;
+import com.exactpro.cradle.testevents.TestEventSingleToStore;
+import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.common.metrics.CommonMetrics;
+import com.exactpro.th2.common.schema.box.configuration.BoxConfiguration;
 import com.exactpro.th2.common.schema.factory.CommonFactory;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.event.Level;
 
+import java.time.Instant;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
@@ -60,16 +69,20 @@ public class EventStore {
             ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
             resources.add(() -> shutdownGracefully(executor, 5, TimeUnit.SECONDS));
 
-            ErrorCollector errorCollector = new ErrorCollector(executor, cradleManager.getStorage().getEntitiesFactory(), factory.getRootEventId());
+            CradleStorage storage = cradleManager.getStorage();
+
+            ErrorCollector errorCollector = new ErrorCollector(executor, storage.getEntitiesFactory());
             resources.add(errorCollector);
 
-            EventPersistor persistor = new EventPersistor(errorCollector, config, cradleManager.getStorage());
+            EventPersistor persistor = new EventPersistor(errorCollector, config, storage);
             resources.add(persistor);
             persistor.start();
-            errorCollector.init(persistor);
+
+            StoredTestEventId rootEventId = createAndStoreRootEvent(persistor, storage.getEntitiesFactory(), factory.getBoxConfiguration());
+            errorCollector.init(persistor, rootEventId);
 
             EventProcessor processor = new EventProcessor(errorCollector, factory.getEventBatchRouter(),
-                    cradleManager.getStorage().getEntitiesFactory(),
+                    storage.getEntitiesFactory(),
                     persistor);
             resources.add(processor);
             processor.start();
@@ -84,6 +97,23 @@ public class EventStore {
             LOGGER.error("Fatal error: {}", e.getMessage(), e);
             System.exit(1);
         }
+    }
+
+    private static StoredTestEventId createAndStoreRootEvent(EventPersistor persistor, CradleEntitiesFactory entitiesFactory, BoxConfiguration boxConfiguration) throws CradleStorageException {
+        Instant now = Instant.now();
+        StoredTestEventId rootEventId = new StoredTestEventId(new BookId(boxConfiguration.getBookName()),
+                boxConfiguration.getBoxName(),
+                now,
+                Util.generateId());
+        TestEventSingleToStore eventToStore = entitiesFactory.testEventBuilder()
+                .id(rootEventId)
+                .name(boxConfiguration.getBoxName() + " " + now)
+                .type("Microservice")
+                .success(true)
+                .endTimestamp(now)
+                .build();
+        persistor.persist(eventToStore, new LogCallBack(LOGGER, Level.INFO));
+        return rootEventId;
     }
 
     private static void awaitShutdown(ReentrantLock lock, Condition condition) throws InterruptedException {

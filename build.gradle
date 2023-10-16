@@ -162,7 +162,7 @@ signing {
 
 dependencies {
     api platform('com.exactpro.th2:bom:4.5.0')
-    implementation 'com.exactpro.th2:common:5.5.0-dev'
+    implementation 'com.exactpro.th2:common:5.6.0-dev'
     implementation("com.exactpro.th2:common-utils:2.2.2-dev") {
         because("executor service utils is used")
     }
