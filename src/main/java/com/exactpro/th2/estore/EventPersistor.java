@@ -17,6 +17,7 @@ package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.CradleManager;
 import com.exactpro.cradle.CradleStorage;
+import com.exactpro.cradle.testevents.BatchedStoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEvent;
 import com.exactpro.cradle.testevents.StoredTestEventBatch;
 import com.exactpro.cradle.testevents.StoredTestEventSingle;
@@ -146,7 +147,8 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
         try {
             samplerService.shutdown();
             samplerService.awaitTermination(1, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
+        } catch (InterruptedException ex) {
+            LOGGER.error("Cannot await all futures are finished", ex);
         }
     }
 
@@ -184,10 +186,12 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
         if (task.getRetriesLeft() > 0) {
 
-            LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
-                    eventBatch.getId(),
-                    task.getRetriesLeft(),
-                    e);
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Failed to store the event '{}', {} retries left, rescheduling",
+                        eventToString(eventBatch),
+                        task.getRetriesLeft(),
+                        e);
+            }
             taskQueue.retry(task);
             metrics.registerPersistenceRetry(retriesDone);
 
@@ -195,15 +199,43 @@ public class EventPersistor implements Runnable, Persistor<StoredTestEvent> {
 
             taskQueue.complete(task);
             metrics.registerAbortedPersistence();
-            LOGGER.error("Failed to store the event batch id '{}', aborting after {} executions",
-                    eventBatch.getId(),
-                    retriesDone,
-                    e);
+            if (LOGGER.isErrorEnabled()) {
+                LOGGER.error("Failed to store the event '{}', aborting after {} executions",
+                        eventToString(eventBatch),
+                        retriesDone,
+                        e);
+            }
             persistenceTask.complete();
         }
     }
 
+    public static String eventToString(StoredTestEvent event) {
+        requireNonNull(event, "'stored test event' can't be null");
 
+        return eventToString(new StringBuilder(), event).toString();
+    }
+
+    private static StringBuilder eventToString(StringBuilder builder, StoredTestEvent event) {
+        if (StoredTestEventBatch.class.equals(event.getClass())) {
+            StoredTestEventBatch batch = (StoredTestEventBatch) event;
+            builder.append("id: ").append(batch.getId()).append(", ")
+                    .append("parent: ").append(event.getParentId()).append(", ")
+                    .append("children: [");
+            for (BatchedStoredTestEvent testEvent : batch.getTestEvents()) {
+                eventToString(builder, testEvent);
+            }
+            builder.append("]");
+        } else {
+            builder.append("(")
+                    .append("id: ").append(event.getId()).append(", ")
+                    .append("parent: ").append(event.getParentId()).append(", ")
+                    .append("name: ").append(event.getName()).append(", ")
+                    .append("type: ").append(event.getType()).append(", ")
+                    .append("timestamp: ").append(event.getStartTimestamp())
+                    .append(")");
+        }
+        return builder;
+    }
     static class PersistenceTask {
         final StoredTestEvent eventBatch;
         final Consumer<StoredTestEvent> callback;
