@@ -50,15 +50,14 @@ jobs:
       run: |
         line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
         if [[ $line_count -gt 1 ]]; then
-          echo "Workflow failed due to faulty certificates"
-          exit 1
+                echo "FAILED: failed/unknown licenses found"
+                exit 1
         else
-          echo "All certificates are valid"
-          echo "Success"
-          exit 0
+                echo "PASSED: license check successfull"
+                exit 0
         fi
 
     - name: Set workflow status
       run: echo "::set-output name=status::Failure"
-      if: steps.set_status.outputs.result == 'Workflow failed due to faulty certificates'
+      if: steps.set_status.outputs.result == 'FAILED: failed/unknown licenses found'
       continue-on-error: false
