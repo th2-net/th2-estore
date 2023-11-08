@@ -50,7 +50,7 @@ jobs:
       run: |
         line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
         if [[ $line_count -gt 1 ]]; then
-                echo "FAILED: failed/unknown licenses found"
+                echo "FAILED due to unknown licenses found"
                 exit 1
         else
                 echo "PASSED: licenses checks successfull"
