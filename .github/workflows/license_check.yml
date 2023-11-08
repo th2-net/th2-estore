@@ -53,7 +53,7 @@ jobs:
                 echo "FAILED: failed/unknown licenses found"
                 exit 1
         else
-                echo "PASSED: license check successfull"
+                echo "PASSED: licenses checks successfull"
                 exit 0
         fi
 
