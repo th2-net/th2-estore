@@ -45,19 +45,20 @@ jobs:
         name: licenses_check-$APP_NAME-$VERSION
         path: ./licenses_check/
     
-    - name: Determine workflow status
-      id: set_status
+    - name: Results checking
+      id: result-check
       run: |
         line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
         if [[ $line_count -gt 1 ]]; then
-                echo "FAILED due to unknown licenses found"
+                echo "FAILED due to unknown/failed licenses found"
                 exit 1
         else
-                echo "PASSED: licenses checks successfull"
+                echo "PASSED: licenses check successfull"
                 exit 0
         fi
-
-    - name: Set workflow status
-      run: echo "::set-output name=status::Failure"
-      if: steps.set_status.outputs.result == 'FAILED due to unknown licenses found'
       continue-on-error: false
+
+#    - name: Set workflow status
+#      run: echo "::set-output name=status::Failure"
+#      if: steps.set_status.outputs.result == 'FAILED due to unknown licenses found'
+#      continue-on-error: false
