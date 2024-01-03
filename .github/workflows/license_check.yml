@@ -12,7 +12,6 @@ on:
 env:
   APP_NAME: ${{ github.repository }}
   BRANCH: ${{ github.ref }}
-  VERSION: ''
 
 jobs:
   check_licenses:
@@ -35,7 +34,9 @@ jobs:
       id: run_script
 
     - name: Get version
-      run: echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,' >> $VERSION
+      run: 
+        VERSION=$( echo "${{ github.ref }}" | awk -F '/' '{print $NF}' )
+        APP_NAME=$( echo "${{ github.repository }}" | awk -F '/' '{print $NF}' )
 
     - name: Uploading results
       if: always()
