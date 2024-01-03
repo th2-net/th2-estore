@@ -28,8 +28,7 @@ jobs:
       runsOn: ${{ inputs.runsOn }}
 
   check_licenses:
-    with:
-      runsOn: ${{ inputs.runsOn }}
+    runs-on: 'ubuntu-20.04'
     needs: [prebuild-job]
 
     steps:
