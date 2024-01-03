@@ -28,7 +28,8 @@ jobs:
       runsOn: ${{ inputs.runsOn }}
 
   check_licenses:
-    runs-on: ${{ inputs.runsOn }}
+    with:
+      runsOn: ${{ inputs.runsOn }}
     needs: [prebuild-job]
 
     steps:
