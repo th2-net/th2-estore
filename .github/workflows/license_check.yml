@@ -1,6 +1,12 @@
 name: Check licenses
 
 on:
+  workflow_call:
+    inputs:
+      runsOn:
+        required: false
+        type: string
+        default: 'ubuntu-20.04'
   push:
     branches-ignore:
       - master
@@ -9,20 +15,20 @@ on:
     paths-ignore:
       - README.md
 
-env:
-  APP_NAME: ${{ github.repository }}
-  BRANCH: ${{ github.ref }}
-  runsOn: "ubuntu-20.04"
+#env:
+#  APP_NAME: ${{ github.repository }}
+#  BRANCH: ${{ github.ref }}
+#  runsOn: "ubuntu-20.04"
 
 jobs:
   prebuild-job:
     name: Prebuild Job
     uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
     with:
-      runsOn: ${{ env.runsOn }}
+      runsOn: ${{ inputs.runsOn }}
 
   check_licenses:
-    runs-on: ${{ env.runsOn }}
+    runs-on: ${{ inputs.runsOn }}
     needs: [prebuild-job]
 
     steps:
