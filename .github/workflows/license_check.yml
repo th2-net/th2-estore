@@ -35,8 +35,8 @@ jobs:
 
     - name: Get version
       run: 
-        VERSION=$( echo "${{ github.ref }}" | awk -F '/' '{print $NF}' )
-        APP_NAME=$( echo "${{ github.repository }}" | awk -F '/' '{print $NF}' )
+        echo "${{ github.ref }}" | awk -F '/' '{print $NF}' > $VERSION
+        echo "${{ github.repository }}" | awk -F '/' '{print $NF}' > $APP_NAME
 
     - name: Uploading results
       if: always()
