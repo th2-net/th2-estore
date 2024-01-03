@@ -12,10 +12,19 @@ on:
 env:
   APP_NAME: ${{ github.repository }}
   BRANCH: ${{ github.ref }}
+  runsOn: "ubuntu-20.04"
 
 jobs:
+  prebuild-job:
+    name: Prebuild Job
+    uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
+    with:
+      runsOn: ${{ env.runsOn }}
+
   check_licenses:
-    runs-on: ubuntu-latest
+    runs-on: ${{ env.runsOn }}
+    needs: [prebuild-job]
+
     steps:
     - name: checkout actions
       uses: actions/checkout@v4
@@ -33,16 +42,16 @@ jobs:
       run: ./check_licenses.sh java
       id: run_script
 
-    - name: Get version
-      run: 
-        echo "${{ github.ref }}" | awk -F '/' '{print $NF}' > $VERSION
-        echo "${{ github.repository }}" | awk -F '/' '{print $NF}' > $APP_NAME
+#    - name: Get version
+#      run: 
+#        echo "${{ github.ref }}" | awk -F '/' '{print $NF}' > $VERSION
+#        echo "${{ github.repository }}" | awk -F '/' '{print $NF}' > $APP_NAME
 
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-${{ env.APP_NAME }}-${{ env.VERSION }}
+        name: licenses_check-${{ needs.prebuild-job.outputs.version }}
         path: ./licenses_check/
 
     - name: Results checking
