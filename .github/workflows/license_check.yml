@@ -10,8 +10,9 @@ on:
       - README.md
 
 env:
-        APP_NAME: ${{ github.repository }}
-        BRANCH: ${{ github.ref }}
+  APP_NAME: ${{ github.repository }}
+  BRANCH: ${{ github.ref }}
+  VERSION: ''
 
 jobs:
   check_licenses:
@@ -34,14 +35,13 @@ jobs:
       id: run_script
 
     - name: Get version
-      run:
-        VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')              
+      run: echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,' >> $VERSION
 
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-${{ APP_NAME }}-${{ VERSION }}
+        name: licenses_check-${{ env.APP_NAME }}-${{ env.VERSION }}
         path: ./licenses_check/
 
     - name: Results checking
