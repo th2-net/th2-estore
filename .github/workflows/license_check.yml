@@ -52,16 +52,15 @@ jobs:
       run: ./check_licenses.sh java
       id: run_script
 
-#    - name: Get version
-#      run: 
-#        echo "${{ github.ref }}" | awk -F '/' '{print $NF}' > $VERSION
-#        echo "${{ github.repository }}" | awk -F '/' '{print $NF}' > $APP_NAME
+    - name: Get repository name
+      run: echo "REPOSITORY_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $NF}')" >> $GITHUB_OUTPUT
+      id: meta
 
     - name: Uploading results
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: licenses_check-${{ needs.prebuild-job.outputs.version }}
+        name: licenses_check-${{ steps.meta.outputs.REPOSITORY_NAME }}-${{ needs.prebuild-job.outputs.version }}
         path: ./licenses_check/
 
     - name: Results checking
