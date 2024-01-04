@@ -7,6 +7,10 @@ on:
         required: false
         type: string
         default: 'ubuntu-20.04'
+    outputs:
+      version:
+        description: "Generated version of the image"
+        value: ${{ jobs.prebuild-job.outputs.version }}
   push:
     branches-ignore:
       - master
@@ -25,7 +29,7 @@ jobs:
     name: Prebuild Job
     uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
     with:
-      runsOn: ${{ inputs.runsOn }}
+      runsOn: 'ubuntu-20.04'
 
   check_licenses:
     runs-on: 'ubuntu-20.04'
