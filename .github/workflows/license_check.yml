@@ -39,7 +39,6 @@ jobs:
         chmod +x ./check_licenses.sh
     
     - name: Run check_licenses script and output if failed cases exist
-      run: ./check_licenses.sh java
       id: run_script
       run: |
         ./check_licenses.sh java
