@@ -9,11 +9,6 @@ on:
     paths-ignore:
       - README.md
 
-#env:
-#  APP_NAME: ${{ github.repository }}
-#  BRANCH: ${{ github.ref }}
-#  runsOn: "ubuntu-20.04"
-
 jobs:
   prebuild-job:
     name: Prebuild Job
@@ -38,7 +33,7 @@ jobs:
         wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
         chmod +x ./check_licenses.sh
     
-    - name: Run check_licenses script and output if failed cases exist
+    - name: Run check_licenses script
       id: run_script
       run: |
         ./check_licenses.sh java
