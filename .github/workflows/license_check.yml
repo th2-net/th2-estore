@@ -1,16 +1,6 @@
 name: Check licenses
 
 on:
-  workflow_call:
-    inputs:
-      runsOn:
-        required: false
-        type: string
-        default: 'ubuntu-20.04'
-    outputs:
-      version:
-        description: "Generated version of the image"
-        value: ${{ jobs.prebuild-job.outputs.version }}
   push:
     branches-ignore:
       - master
@@ -48,9 +38,19 @@ jobs:
         wget -q -O check_licenses.sh https://raw.githubusercontent.com/th2-net/.github/th2-1836-json-files-update/license-compliance/check_licenses.sh
         chmod +x ./check_licenses.sh
     
-    - name: Run check_licenses script
+    - name: Run check_licenses script and output if failed cases exist
       run: ./check_licenses.sh java
       id: run_script
+      run: |
+        ./check_licenses.sh java
+        line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
+        if [[ $line_count -gt 1 ]]; then
+                echo "FAILED due to unknown/failed licenses found"
+                exit 1
+        else
+                echo "PASSED: licenses check successfull"
+                exit 0
+        fi
 
     - name: Get repository name
       run: echo "REPOSITORY_NAME=$(echo '${{ github.repository }}' | awk -F '/' '{print $NF}')" >> $GITHUB_OUTPUT
@@ -63,18 +63,18 @@ jobs:
         name: licenses_check-${{ steps.meta.outputs.REPOSITORY_NAME }}-${{ needs.prebuild-job.outputs.version }}
         path: ./licenses_check/
 
-    - name: Results checking
-      id: result-check
-      run: |
-        line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
-        if [[ $line_count -gt 1 ]]; then
-                echo "FAILED due to unknown/failed licenses found"
-                exit 1
-        else
-                echo "PASSED: licenses check successfull"
-                exit 0
-        fi
-      continue-on-error: false
+#    - name: Results checking
+#      id: result-check
+#      run: |
+#        line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
+#        if [[ $line_count -gt 1 ]]; then
+#                echo "FAILED due to unknown/failed licenses found"
+#                exit 1
+#        else
+#                echo "PASSED: licenses check successfull"
+#                exit 0
+#       fi
+#      continue-on-error: false
 
 #    - name: Set workflow status
 #      run: echo "::set-output name=status::Failure"
