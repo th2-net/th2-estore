@@ -1,6 +1,7 @@
 name: Check licenses
 
-on:
+on: 
+  workflow_dispatch:
   push:
     branches-ignore:
       - master
