@@ -39,7 +39,7 @@ jobs:
       run: |
         ./check_licenses.sh java
         line_count=$(wc -l < ./licenses_check/failed_licenses.csv)
-        if [[ $line_count -gt 1 ]]; then
+        if [[ $line_count -ge 1 ]]; then
                 echo "FAILED due to unknown/failed licenses found"
                 exit 1
         else
@@ -54,7 +54,7 @@ jobs:
 
     - name: Uploading results
       if: ${{ !cancelled() }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: licenses_check-${{ steps.meta.outputs.REPOSITORY_NAME }}-${{ needs.prebuild-job.outputs.version }}
         path: ./licenses_check/
