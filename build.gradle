@@ -15,7 +15,7 @@ plugins {
 }
 
 ext {
-    cradleVersion = '5.1.4-dev'
+    cradleVersion = '5.2.0-TH2-5165-+'
 }
 
 group = 'com.exactpro.th2'
@@ -162,7 +162,7 @@ signing {
 
 dependencies {
     api platform('com.exactpro.th2:bom:4.5.0')
-    implementation 'com.exactpro.th2:common:5.6.0-dev'
+    implementation 'com.exactpro.th2:common:5.8.0-dev'
     implementation("com.exactpro.th2:common-utils:2.2.2-dev") {
         because("executor service utils is used")
     }
@@ -179,12 +179,12 @@ dependencies {
 
     implementation 'com.fasterxml.jackson.core:jackson-databind'
     implementation('com.fasterxml.jackson.datatype:jackson-datatype-jsr310') {
-        because("Error collector serialise Intant values")
+        because("Error collector serialise Instant values")
     }
 
     testImplementation 'org.apache.commons:commons-lang3'
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.4.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
 }
 
 test {
