@@ -9,7 +9,7 @@ plugins {
     id 'java-library'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "8.4.0"
+    id "org.owasp.dependencycheck" version "9.0.9"
     id 'com.github.jk1.dependency-license-report' version '2.5'
     id "de.undercouch.download" version "5.4.0"
 }
@@ -161,8 +161,8 @@ signing {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.5.0')
-    implementation 'com.exactpro.th2:common:5.8.0-dev'
+    api platform('com.exactpro.th2:bom:4.6.0')
+    implementation 'com.exactpro.th2:common:5.9.1-dev'
     implementation("com.exactpro.th2:common-utils:2.2.2-dev") {
         because("executor service utils is used")
     }
