@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -18,6 +18,7 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.testevents.TestEventBatchToStore;
+import com.exactpro.cradle.testevents.TestEventBatchToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventToStore;
@@ -207,19 +208,18 @@ public class EventProcessor implements AutoCloseable {
 
 
     private TestEventBatchToStore toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
-        TestEventBatchToStore cradleEventBatch = entitiesFactory.testEventBatchBuilder()
+        TestEventBatchToStoreBuilder cradleEventBatch = entitiesFactory.testEventBatchBuilder()
                 .id(
                         new BookId(protoEventBatch.getParentEventId().getBookName()),
                         protoEventBatch.getParentEventId().getScope(),
                         StorageUtils.toInstant(ProtoUtil.getMinStartTimestamp(protoEventBatch.getEventsList())),
                         Util.generateId()
                 )
-                .parentId(ProtoUtil.toCradleEventID(protoEventBatch.getParentEventId()))
-                .build();
+                .parentId(ProtoUtil.toCradleEventID(protoEventBatch.getParentEventId()));
         for (Event protoEvent : protoEventBatch.getEventsList()) {
             cradleEventBatch.addTestEvent(toCradleEvent(protoEvent));
         }
-        return cradleEventBatch;
+        return cradleEventBatch.build();
     }
 
     private class ProcessorCallback implements Callback<TestEventToStore> {

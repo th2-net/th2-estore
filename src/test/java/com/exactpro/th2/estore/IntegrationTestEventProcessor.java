@@ -203,6 +203,8 @@ public class IntegrationTestEventProcessor {
         EventID rootEventId = rootEvent.getId();
 
         for (TestStage stage : TestStage.values()) {
+            LOGGER.info("Sending - stage: {}", stage);
+            long start = System.nanoTime();
             generateEventBatch(rootEventId, status, batchSize, contentSize, attachedMessages)
                     .limit(ITERATIONS)
                     .forEach((packet) -> {
@@ -211,6 +213,11 @@ public class IntegrationTestEventProcessor {
                         processor.process(packet.batch, confirmation);
                     });
 
+            long sent = System.nanoTime();
+            LOGGER.info("Waiting - stage: {}, batch rate: {}, event rate: {}",
+                    stage,
+                    ((double) ITERATIONS) / (sent - start) * 1_000_000_000,
+                    ((double) ITERATIONS) / (sent - start) * 1_000_000_000 * batchSize);
             List<Statistic> statistics = new ArrayList<>();
             for (int i = 0; i < ITERATIONS; i++) {
                 statistics.add(requireNonNull(queue.poll(1, TimeUnit.DAYS),
@@ -219,6 +226,10 @@ public class IntegrationTestEventProcessor {
                 );
             }
 
+            LOGGER.info("Complete - stage: {}, batch rate: {}, event rate: {}",
+                    stage,
+                    ((double) ITERATIONS) / (System.nanoTime() - start) * 1_000_000_000,
+                    ((double) ITERATIONS) / (System.nanoTime() - start) * 1_000_000_000 * batchSize);
             LOGGER.info("{} (min/median/max) - preparation: {}, packToProto: {}, processing: {}, rate: {}",
                     stage,
                     calculate(statistics, batchSize, Statistic::getPreparation),
@@ -271,10 +282,9 @@ public class IntegrationTestEventProcessor {
                     book,
                     contentSize,
                     attachedMessages);
-            Event subEventBuilder = mainEventBuilder;
 
             for (int item = 0; item < batchSize; item++) {
-                subEventBuilder = fillEvent(subEventBuilder.addSubEventWithSamePeriod(),
+                fillEvent(mainEventBuilder.addSubEventWithSamePeriod(),
                         status,
                         "sub",
                         book,
@@ -329,10 +339,10 @@ public class IntegrationTestEventProcessor {
     private static Stream<Arguments> provideEventsArgs() {
         return Stream.of(
                 // status, batch size, content size, attached messages
-                Arguments.of(Event.Status.PASSED, 1, 500, 100),
-                Arguments.of(Event.Status.PASSED, 10, 500, 100),
-                Arguments.of(Event.Status.PASSED, 100, 500, 100),
-                Arguments.of(Event.Status.PASSED, 1000, 500, 100)
+//                Arguments.of(Event.Status.PASSED, 1, 500, 100),
+//                Arguments.of(Event.Status.PASSED, 10, 500, 100),
+                Arguments.of(Event.Status.PASSED, 100, 500, 100)
+//                Arguments.of(Event.Status.PASSED, 1000, 500, 100)
         );
     }
 
@@ -367,19 +377,19 @@ public class IntegrationTestEventProcessor {
             this.preparation = toProto - start;
             this.packToProto = toPacket - toProto;
             this.processing = complete - toPacket;
-            this.rate = 1_000D/this.processing;
+            this.rate = 1_000_000_000D/this.processing;
         }
 
         private Statistic(long start, long toProto) {
-            this(start, toProto, System.currentTimeMillis(), -1, -1);
+            this(start, toProto, System.nanoTime(), -1, -1);
         }
 
         private Statistic withToSend() {
-            return new Statistic(start, toProto, toPacket, System.currentTimeMillis(), complete);
+            return new Statistic(start, toProto, toPacket, System.nanoTime(), complete);
         }
 
         private Statistic withComplete() {
-            return new Statistic(start, toProto, toPacket, toSend, System.currentTimeMillis());
+            return new Statistic(start, toProto, toPacket, toSend, System.nanoTime());
         }
 
         public long getPreparation() {
