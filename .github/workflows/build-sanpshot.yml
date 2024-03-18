@@ -33,8 +33,9 @@ jobs:
           --builder paketobuildpacks/builder-jammy-base
           -e BP_GRADLE_BUILT_ARTIFACT=./build/distributions/service*.zip
           -e BP_GRADLE_ADDITIONAL_BUILD_ARGUMENTS=distZip
-          -e BPE_BPL_JVM_THREAD_COUNT=20
+          -e BPE_DEFAULT_BPL_JVM_THREAD_COUNT=20
           -e BP_JVM_VERSION=11
+          -e BP_JVM_TYPE=JDK
           -e BPE_DELIM_JAVA_TOOL_OPTIONS=' '
           -e BPE_APPEND_JAVA_TOOL_OPTIONS='-XX:ActiveProcessorCount=-1'
       - uses: docker/login-action@v3
