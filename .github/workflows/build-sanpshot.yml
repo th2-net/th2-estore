@@ -30,12 +30,12 @@ jobs:
       - name: Create image
         run: >
           pack build ghcr.io/${{ github.repository }}:${{ needs.prebuild-job.outputs.version }}
-          --buildpack paketo-buildpacks/ca-certificates:latest
-          --buildpack paketo-buildpacks/azul-zulu:latest
-          --buildpack paketo-buildpacks/syft:latest
-          --buildpack paketo-buildpacks/gradle:latest
-          --buildpack paketo-buildpacks/dist-zip:latest
-          --buildpack paketo-buildpacks/environment-variables:latest
+          --buildpack paketo-buildpacks/ca-certificates:3.6.8
+          --buildpack paketo-buildpacks/azul-zulu:10.2.10
+          --buildpack paketo-buildpacks/syft:1.45.1
+          --buildpack paketo-buildpacks/gradle:7.8.1
+          --buildpack paketo-buildpacks/dist-zip:5.6.9
+          --buildpack paketo-buildpacks/environment-variables:4.5.7
           --builder paketobuildpacks/builder-jammy-base:latest
           -e BP_GRADLE_BUILT_ARTIFACT=./build/distributions/service*.zip
           -e BP_GRADLE_ADDITIONAL_BUILD_ARGUMENTS=distZip
