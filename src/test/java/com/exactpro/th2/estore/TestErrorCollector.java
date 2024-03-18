@@ -19,7 +19,6 @@ import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.cradle.testevents.TestEventSingleToStore;
-import com.exactpro.cradle.testevents.TestEventToStore;
 import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -62,7 +62,7 @@ class TestErrorCollector {
     @Mock
     private ScheduledFuture<?> future;
     @Mock
-    private Persistor<TestEventToStore> persistor;
+    private Persistor<IEventWrapper> persistor;
     private final CradleEntitiesFactory entitiesFactory = spy(new CradleEntitiesFactory(1_024^2, 1_024^2, 30_000L));
     private final StoredTestEventId rootEvent = new StoredTestEventId(
             new BookId("test-book"),
@@ -103,12 +103,12 @@ class TestErrorCollector {
 
         taskCaptor.getValue().run();
 
-        ArgumentCaptor<TestEventToStore> eventBatchCaptor = ArgumentCaptor.forClass(TestEventToStore.class);
+        ArgumentCaptor<IEventWrapper> eventBatchCaptor = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistor).persist(eventBatchCaptor.capture(), any());
         verify(entitiesFactory).testEventBuilder();
 
-        assertTrue(eventBatchCaptor.getValue().isSingle());
-        TestEventSingleToStore event = eventBatchCaptor.getValue().asSingle();
+        assertInstanceOf(IEventWrapper.ProtoEventSingleWrapper.class, eventBatchCaptor.getValue());
+        TestEventSingleToStore event = eventBatchCaptor.getValue().get().asSingle();
 
         assertEquals("estore internal problem(s): 3", event.getName());
         assertEquals("InternalError", event.getType());
@@ -133,12 +133,12 @@ class TestErrorCollector {
 
         taskCaptor.getValue().run();
 
-        ArgumentCaptor<TestEventToStore> eventBatchCaptor = ArgumentCaptor.forClass(TestEventToStore.class);
+        ArgumentCaptor<IEventWrapper> eventBatchCaptor = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistor).persist(eventBatchCaptor.capture(), any());
         verify(entitiesFactory).testEventBuilder();
 
-        assertTrue(eventBatchCaptor.getValue().isSingle());
-        TestEventSingleToStore event = eventBatchCaptor.getValue().asSingle();
+        assertInstanceOf(IEventWrapper.ProtoEventSingleWrapper.class, eventBatchCaptor.getValue());
+        TestEventSingleToStore event = eventBatchCaptor.getValue().get().asSingle();
 
         assertEquals("estore internal problem(s): 1", event.getName());
         assertEquals("InternalError", event.getType());
@@ -159,12 +159,12 @@ class TestErrorCollector {
 
         verify(future).cancel(eq(true));
 
-        ArgumentCaptor<TestEventToStore> eventBatchCaptor = ArgumentCaptor.forClass(TestEventToStore.class);
+        ArgumentCaptor<IEventWrapper> eventBatchCaptor = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistor).persist(eventBatchCaptor.capture(), any());
         verify(entitiesFactory).testEventBuilder();
 
-        assertTrue(eventBatchCaptor.getValue().isSingle());
-        TestEventSingleToStore event = eventBatchCaptor.getValue().asSingle();
+        assertInstanceOf(IEventWrapper.ProtoEventSingleWrapper.class, eventBatchCaptor.getValue());
+        TestEventSingleToStore event = eventBatchCaptor.getValue().get().asSingle();
 
         assertEquals("estore internal problem(s): 1", event.getName());
         assertEquals("InternalError", event.getType());

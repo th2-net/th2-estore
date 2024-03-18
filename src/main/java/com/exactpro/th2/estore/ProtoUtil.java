@@ -17,6 +17,7 @@
 package com.exactpro.th2.estore;
 
 import com.exactpro.cradle.BookId;
+import com.exactpro.cradle.Direction;
 import com.exactpro.cradle.messages.StoredMessageId;
 import com.exactpro.cradle.testevents.StoredTestEventId;
 import com.exactpro.th2.common.grpc.Event;
@@ -26,6 +27,7 @@ import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
 import com.exactpro.th2.common.util.StorageUtils;
 import com.google.protobuf.Timestamp;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
 
@@ -49,7 +51,7 @@ public class ProtoUtil {
                 new BookId(protoEventID.getBookName()),
                 protoEventID.getScope(),
                 StorageUtils.toInstant(protoEventID.getStartTimestamp()),
-                String.valueOf(protoEventID.getId())
+                protoEventID.getId()
         );
     }
 

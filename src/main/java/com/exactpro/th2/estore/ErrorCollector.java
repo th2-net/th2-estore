@@ -46,19 +46,19 @@ import static java.util.Objects.requireNonNull;
 @SuppressWarnings("unused")
 public class ErrorCollector implements AutoCloseable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ErrorCollector.class);
-    private static final Callback<TestEventToStore> PERSIST_CALL_BACK = new LogCallBack(LOGGER, Level.TRACE);
+    private static final Callback<IEventWrapper> PERSIST_CALL_BACK = new LogCallBack(LOGGER, Level.TRACE);
     private static final ThreadLocal<ObjectMapper> OBJECT_MAPPER = ThreadLocal.withInitial(() ->
             new ObjectMapper()
                     .registerModule(new JavaTimeModule())
                     // otherwise, type supported by JavaTimeModule will be serialized as array of date component
                     .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                     .setSerializationInclusion(NON_NULL));
-    private static final Persistor<TestEventToStore> DYMMY_PERSISTOR = new DymmyPersistor();
+    private static final Persistor<IEventWrapper> DYMMY_PERSISTOR = new DymmyPersistor();
     private final ScheduledFuture<?> drainFuture;
     private final CradleEntitiesFactory entitiesFactory;
     private final Lock lock = new ReentrantLock();
     private volatile StoredTestEventId rootEvent;
-    private volatile Persistor<TestEventToStore> persistor = DYMMY_PERSISTOR;
+    private volatile Persistor<IEventWrapper> persistor = DYMMY_PERSISTOR;
     private Map<String, ErrorMetadata> errors = new HashMap<>();
 
     public ErrorCollector(@NotNull ScheduledExecutorService executor,
@@ -76,7 +76,7 @@ public class ErrorCollector implements AutoCloseable {
         this(executor, entitiesFactory, 1, TimeUnit.MINUTES);
     }
 
-    public void init(@NotNull Persistor<TestEventToStore> persistor, StoredTestEventId rootEvent) {
+    public void init(@NotNull Persistor<IEventWrapper> persistor, StoredTestEventId rootEvent) {
         this.persistor = requireNonNull(persistor, "Persistor factory can't be null");
         this.rootEvent = requireNonNull(rootEvent, "Root event id can't be null");
     }
@@ -124,7 +124,7 @@ public class ErrorCollector implements AutoCloseable {
             if (map.isEmpty()) { return; }
 
             Instant now = Instant.now();
-            TestEventSingleToStore eventToStore = entitiesFactory.testEventBuilder()
+            IEventWrapper eventWrapper = IEventWrapper.wrap(entitiesFactory.testEventBuilder()
                     .id(new StoredTestEventId(rootEvent.getBookId(), rootEvent.getScope(), now, Util.generateId()))
                     .name("estore internal problem(s): " + calculateTotalQty(map.values()))
                     .type("InternalError")
@@ -133,9 +133,9 @@ public class ErrorCollector implements AutoCloseable {
                     .endTimestamp(now)
                     // Content wrapped to list to use the same format as mstore
                     .content(OBJECT_MAPPER.get().writeValueAsBytes(List.of(new BodyData(map))))
-                    .build();
+                    .build());
 
-            persistor.persist(eventToStore, PERSIST_CALL_BACK);
+            persistor.persist(eventWrapper, PERSIST_CALL_BACK);
         } catch (Exception e) {
             LOGGER.error("Drain events task failure", e);
         }
@@ -200,10 +200,10 @@ public class ErrorCollector implements AutoCloseable {
         }
     }
 
-    private static class DymmyPersistor implements Persistor<TestEventToStore> {
+    private static class DymmyPersistor implements Persistor<IEventWrapper> {
 
         @Override
-        public void persist(TestEventToStore data, Callback<TestEventToStore> callback) {
+        public void persist(IEventWrapper data, Callback<IEventWrapper> callback) {
             LOGGER.warn( "{} isn't initialised", ErrorCollector.class.getSimpleName());
         }
     }

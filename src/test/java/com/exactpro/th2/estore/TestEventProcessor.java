@@ -49,6 +49,7 @@ import static com.exactpro.th2.common.message.MessageUtils.toTimestamp;
 import static com.exactpro.th2.common.util.StorageUtils.toInstant;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -68,7 +69,7 @@ public class TestEventProcessor {
     private static final Random RANDOM = new Random();
 
     @SuppressWarnings("unchecked")
-    private final Persistor<TestEventToStore> persistorMock = mock(Persistor.class);
+    private final Persistor<IEventWrapper> persistorMock = mock(Persistor.class);
     @SuppressWarnings("unchecked")
     private final MessageRouter<EventBatch> routerMock = mock(MessageRouter.class);
     private final Confirmation confirmation = mock(Confirmation.class);
@@ -99,10 +100,10 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<IEventWrapper> capture = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistorMock, times(1)).persist(capture.capture(), any());
 
-        TestEventSingleToStore capturedValue = capture.getValue();
+        TestEventSingleToStore capturedValue = capture.getValue().get().asSingle();
         assertNotNull(capturedValue, "Captured stored root event");
         assertStoredEvent(event, capturedValue);
     }
@@ -115,10 +116,10 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<IEventWrapper> capture = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistorMock, times(1)).persist(capture.capture(), any());
 
-        TestEventSingleToStore capturedValue = capture.getValue();
+        TestEventSingleToStore capturedValue = capture.getValue().get().asSingle();
         assertNotNull(capturedValue, "Captured stored sub-event");
         assertStoredEvent(event, capturedValue);
     }
@@ -133,17 +134,17 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> capture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<IEventWrapper> capture = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistorMock, times(2)).persist(capture.capture(), any());
-        List<TestEventSingleToStore> capturedValues = capture.getAllValues();
+        List<IEventWrapper> capturedValues = capture.getAllValues();
 
-        TestEventSingleToStore capturedValue = capture.getAllValues().get(0);
+        TestEventSingleToStore capturedValue = capture.getAllValues().get(0).get().asSingle();
         assertNotNull(capturedValue, "Captured first stored event");
-        assertStoredEvent(first, capturedValues.get(0));
+        assertStoredEvent(first, capturedValues.get(0).get().asSingle());
 
-        capturedValue = capture.getAllValues().get(1);
+        capturedValue = capture.getAllValues().get(1).get().asSingle();
         assertNotNull(capturedValue, "Captured second stored event");
-        assertStoredEvent(second, capturedValues.get(1));
+        assertStoredEvent(second, capturedValues.get(1).get().asSingle());
     }
 
     @Test
@@ -158,20 +159,20 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        ArgumentCaptor<IEventWrapper> eventCapture = ArgumentCaptor.forClass(IEventWrapper.class);
+        ArgumentCaptor<Callback<IEventWrapper>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
         verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
 
-        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
-        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+        List<IEventWrapper> capturedEvents = eventCapture.getAllValues();
+        List<Callback<IEventWrapper>> capturedCallbacks = callbackCapture.getAllValues();
 
-        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        TestEventSingleToStore capturedValue = capturedEvents.get(0).get().asSingle();
         assertNotNull(capturedValue, "Captured first stored event");
-        assertStoredEvent(first, capturedEvents.get(0));
+        assertStoredEvent(first, capturedValue);
 
-        capturedValue = capturedEvents.get(1);
+        capturedValue = capturedEvents.get(1).get().asSingle();
         assertNotNull(capturedValue, "Captured second stored event");
-        assertStoredEvent(second, capturedEvents.get(1));
+        assertStoredEvent(second, capturedValue);
 
         // trigger and verify confirmations
         capturedCallbacks.get(0).onSuccess(capturedEvents.get(0));
@@ -192,20 +193,20 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        ArgumentCaptor<IEventWrapper> eventCapture = ArgumentCaptor.forClass(IEventWrapper.class);
+        ArgumentCaptor<Callback<IEventWrapper>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
         verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
 
-        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
-        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+        List<IEventWrapper> capturedEvents = eventCapture.getAllValues();
+        List<Callback<IEventWrapper>> capturedCallbacks = callbackCapture.getAllValues();
 
-        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        TestEventSingleToStore capturedValue = capturedEvents.get(0).get().asSingle();
         assertNotNull(capturedValue, "Captured first stored event");
-        assertStoredEvent(first, capturedEvents.get(0));
+        assertStoredEvent(first, capturedValue);
 
-        capturedValue = capturedEvents.get(1);
+        capturedValue = capturedEvents.get(1).get().asSingle();
         assertNotNull(capturedValue, "Captured second stored event");
-        assertStoredEvent(second, capturedEvents.get(1));
+        assertStoredEvent(second, capturedValue);
 
         // trigger and verify confirmations
         capturedCallbacks.get(0).onFail(capturedEvents.get(0));
@@ -227,20 +228,20 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
-        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        ArgumentCaptor<IEventWrapper> eventCapture = ArgumentCaptor.forClass(IEventWrapper.class);
+        ArgumentCaptor<Callback<IEventWrapper>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
         verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
 
-        List<TestEventSingleToStore> capturedEvents = eventCapture.getAllValues();
-        List<Callback<TestEventToStore>> capturedCallbacks = callbackCapture.getAllValues();
+        List<IEventWrapper> capturedEvents = eventCapture.getAllValues();
+        List<Callback<IEventWrapper>> capturedCallbacks = callbackCapture.getAllValues();
 
-        TestEventSingleToStore capturedValue = capturedEvents.get(0);
+        TestEventSingleToStore capturedValue = capturedEvents.get(0).get().asSingle();
         assertNotNull(capturedValue, "Captured first stored event");
-        assertStoredEvent(first, capturedEvents.get(0));
+        assertStoredEvent(first, capturedValue);
 
-        capturedValue = capturedEvents.get(1);
+        capturedValue = capturedEvents.get(1).get().asSingle();
         assertNotNull(capturedValue, "Captured second stored event");
-        assertStoredEvent(second, capturedEvents.get(1));
+        assertStoredEvent(second, capturedValue);
 
         // trigger and verify confirmations
         capturedCallbacks.get(0).onSuccess(capturedEvents.get(0));
@@ -300,10 +301,10 @@ public class TestEventProcessor {
 
         verify(cradleEntitiesFactory, never()).testEventBatchBuilder();
 
-        ArgumentCaptor<TestEventSingleToStore> captureEvent = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<IEventWrapper> captureEvent = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistorMock, times(1)).persist(captureEvent.capture(), any());
 
-        TestEventSingleToStore capturedValue = captureEvent.getValue();
+        TestEventSingleToStore capturedValue = captureEvent.getValue().get().asSingle();
         assertNotNull(capturedValue, "Captured stored event");
         assertStoredEvent(first, capturedValue);
     }
@@ -311,10 +312,10 @@ public class TestEventProcessor {
     private void assertTestEventBatchToStore(EventID parentId, Event first, Event second) throws Exception {
         eventStore.process(deliveryOf(parentId, first, second), confirmation);
 
-        ArgumentCaptor<TestEventBatchToStore> capture = ArgumentCaptor.forClass(TestEventBatchToStore.class);
+        ArgumentCaptor<IEventWrapper> capture = ArgumentCaptor.forClass(IEventWrapper.class);
         verify(persistorMock, times(1)).persist(capture.capture(), any());
 
-        TestEventBatchToStore testEventBatchToStore = capture.getValue();
+        TestEventBatchToStore testEventBatchToStore = capture.getValue().get().asBatch();
         assertEquals(
                 new StoredTestEventId(
                         new BookId(parentId.getBookName()),
@@ -325,7 +326,7 @@ public class TestEventProcessor {
                 testEventBatchToStore.getParentId()
         );
         List<Event> expectedEvents = List.of(first, second);
-        List<BatchedStoredTestEvent> actualEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
+        List<TestEventSingleToStore> actualEvents = new ArrayList<>(testEventBatchToStore.getTestEvents());
         assertEquals(expectedEvents.size(), actualEvents.size(), "Event batch size");
         for (int i = 0; i < expectedEvents.size(); i++) {
             assertStoredEvent(expectedEvents.get(i), actualEvents.get(i));

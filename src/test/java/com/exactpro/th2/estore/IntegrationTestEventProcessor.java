@@ -53,6 +53,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -80,13 +81,13 @@ public class IntegrationTestEventProcessor {
         @Override
         public void confirm() {}
     };
-    private static final int ITERATIONS = 1_000;
+    private static final double ITERATIONS = 2_000D;
     private static final Logger LOGGER = LoggerFactory.getLogger(IntegrationTestEventProcessor.class);
     private static final AtomicInteger EVENT_COUNTER = new AtomicInteger();
     private static final String TEST_BOOK = "test_book";
     private static final String TEST_SCOPE = "test-scope";
     public static final String TEST_SESSION_GROUP = "test-session-group";
-    public static final String TEST_SESSION_ALIAS = "test-session-alias";
+    public static final String TEST_SESSION_ALIAS_PREFIX = "test-session-alias";
 
     private EventProcessor processor;
 
@@ -143,20 +144,20 @@ public class IntegrationTestEventProcessor {
     public void testRootEvents(Event.Status status,
                                int batchSize,
                                int contentSize,
-                               int attachedMessages,
+                               int sessionAliases,
                                CradleManager manager) throws InterruptedException, CradleStorageException, IOException {
         LOGGER.info("testRootEvents - status: {}, batch size: {}, content size: {}, attached message ids: {}",
                 status,
                 batchSize,
                 contentSize,
-                attachedMessages);
+                sessionAliases);
         BlockingQueue<TestConfirmation> queue = new LinkedBlockingQueue<>();
-        String bookName = "testRootEvents_" + status + '_' + batchSize + '_' + contentSize + '_' + attachedMessages;
+        String bookName = "testRootEvents_" + status + '_' + batchSize + '_' + contentSize + '_' + sessionAliases;
         createBook(manager.getStorage(), bookName);
 
         for (TestStage stage : TestStage.values()) {
-            generateRootEvents(bookName, status, batchSize, contentSize, attachedMessages)
-                    .limit(ITERATIONS)
+            generateRootEvents(bookName, status, batchSize, contentSize, sessionAliases)
+                    .limit((long) ITERATIONS)
                     .forEach((packet) -> {
                         TestConfirmation confirmation = new TestConfirmation(packet.statistic);
                         queue.add(confirmation);
@@ -186,15 +187,15 @@ public class IntegrationTestEventProcessor {
     public void testEvents(Event.Status status,
                                int batchSize,
                                int contentSize,
-                               int attachedMessages,
+                               int sessionAliases,
                                CradleManager manager) throws InterruptedException, CradleStorageException, IOException {
         LOGGER.info("testEvents - status: {}, batch size: {}, content size: {}, attached message ids: {}",
                 status,
                 batchSize,
                 contentSize,
-                attachedMessages);
+                sessionAliases);
         BlockingQueue<TestConfirmation> queue = new LinkedBlockingQueue<>();
-        String bookName = "testEvents_" + status + '_' + batchSize + '_' + contentSize + '_' + attachedMessages;
+        String bookName = "testEvents_" + status + '_' + batchSize + '_' + contentSize + '_' + sessionAliases;
         createBook(manager.getStorage(), bookName);
         com.exactpro.th2.common.grpc.Event rootEvent = fillEvent(Event.start(), Event.Status.PASSED, "root", bookName, 0, 0)
                 .toProto(bookName, TEST_SCOPE);
@@ -205,19 +206,26 @@ public class IntegrationTestEventProcessor {
         for (TestStage stage : TestStage.values()) {
             LOGGER.info("Sending - stage: {}", stage);
             long start = System.nanoTime();
-            generateEventBatch(rootEventId, status, batchSize, contentSize, attachedMessages)
-                    .limit(ITERATIONS)
-                    .forEach((packet) -> {
+            List<Packet> packets = generateEventBatch(rootEventId, status, batchSize, contentSize, sessionAliases)
+                    .limit((long) ITERATIONS)
+                    .collect(Collectors.toList());
+
+            long prepared = System.nanoTime();
+            LOGGER.info("Prepared - stage: {}, batch rate: {}, event rate: {}",
+                    stage,
+                    ITERATIONS / (prepared - start) * 1_000_000_000,
+                    ITERATIONS / (prepared - start) * 1_000_000_000 * batchSize);
+            packets.forEach((packet) -> {
                         TestConfirmation confirmation = new TestConfirmation(packet.statistic);
                         queue.add(confirmation);
                         processor.process(packet.batch, confirmation);
                     });
 
             long sent = System.nanoTime();
-            LOGGER.info("Waiting - stage: {}, batch rate: {}, event rate: {}",
+            LOGGER.info("Sent - stage: {}, batch rate: {}, event rate: {}",
                     stage,
-                    ((double) ITERATIONS) / (sent - start) * 1_000_000_000,
-                    ((double) ITERATIONS) / (sent - start) * 1_000_000_000 * batchSize);
+                    ITERATIONS / (sent - prepared) * 1_000_000_000,
+                    ITERATIONS / (sent - prepared) * 1_000_000_000 * batchSize);
             List<Statistic> statistics = new ArrayList<>();
             for (int i = 0; i < ITERATIONS; i++) {
                 statistics.add(requireNonNull(queue.poll(1, TimeUnit.DAYS),
@@ -228,8 +236,8 @@ public class IntegrationTestEventProcessor {
 
             LOGGER.info("Complete - stage: {}, batch rate: {}, event rate: {}",
                     stage,
-                    ((double) ITERATIONS) / (System.nanoTime() - start) * 1_000_000_000,
-                    ((double) ITERATIONS) / (System.nanoTime() - start) * 1_000_000_000 * batchSize);
+                    ITERATIONS / (System.nanoTime() - prepared) * 1_000_000_000,
+                    ITERATIONS / (System.nanoTime() - prepared) * 1_000_000_000 * batchSize);
             LOGGER.info("{} (min/median/max) - preparation: {}, packToProto: {}, processing: {}, rate: {}",
                     stage,
                     calculate(statistics, batchSize, Statistic::getPreparation),
@@ -272,7 +280,7 @@ public class IntegrationTestEventProcessor {
                                               Event.Status status,
                                               int batchSize,
                                               int contentSize,
-                                              int attachedMessages) {
+                                              int sessionAliases) {
         String book = parentEventId.getBookName();
         return Stream.generate(() -> {
             long start = System.currentTimeMillis();
@@ -281,7 +289,7 @@ public class IntegrationTestEventProcessor {
                     "main",
                     book,
                     contentSize,
-                    attachedMessages);
+                    sessionAliases);
 
             for (int item = 0; item < batchSize; item++) {
                 fillEvent(mainEventBuilder.addSubEventWithSamePeriod(),
@@ -289,7 +297,7 @@ public class IntegrationTestEventProcessor {
                         "sub",
                         book,
                         contentSize,
-                        attachedMessages);
+                        sessionAliases);
             }
             long toProto = System.currentTimeMillis();
             try {
@@ -301,27 +309,28 @@ public class IntegrationTestEventProcessor {
         });
     }
 
-    private static Event fillEvent(Event eventBuilder, Event.Status status, String name, String book, int contentSize, int attachedMessages) {
+    private static Event fillEvent(Event eventBuilder, Event.Status status, String name, String book, int contentSize, int sessionAliases) {
         eventBuilder.name(name + '-' + EVENT_COUNTER.incrementAndGet())
                 .type(name)
                 .status(status);
         if (contentSize > 0) {
             eventBuilder.bodyData(genrateMessage(contentSize));
         }
-        for (int i = 0; i < attachedMessages; i++) {
-            MessageID.Builder msgBuilder = MessageID.newBuilder();
-            msgBuilder.setBookName(book)
-                    .setDirection(Direction.SECOND)
-                    .setTimestamp(MessageUtilsKt.toTimestamp(Instant.now()))
-                    .setSequence(i + 1);
-            msgBuilder.getConnectionIdBuilder()
-                    .setSessionGroup(TEST_SESSION_GROUP)
-                    .setSessionAlias(TEST_SESSION_ALIAS);
-            eventBuilder.messageID(msgBuilder.build());
+        for (int i = 0; i < sessionAliases; i++) {
+            for (Direction direction : Set.of(Direction.FIRST, Direction.SECOND)) {
+                MessageID.Builder msgBuilder = MessageID.newBuilder();
+                msgBuilder.setBookName(book)
+                        .setDirection(direction)
+                        .setTimestamp(MessageUtilsKt.toTimestamp(Instant.now()))
+                        .setSequence(i + 1);
+                msgBuilder.getConnectionIdBuilder()
+                        .setSessionGroup(TEST_SESSION_GROUP)
+                        .setSessionAlias(TEST_SESSION_ALIAS_PREFIX + i);
+                eventBuilder.messageID(msgBuilder.build());
+            }
         }
         return eventBuilder;
     }
-
 
     private static <T extends Number> String calculate(List<Statistic> statistics, double divider, Function<Statistic, T> getFunc) {
         List<Double> values = statistics.stream().map(getFunc).map(v -> v.doubleValue() / divider).sorted().collect(Collectors.toList());
@@ -341,7 +350,8 @@ public class IntegrationTestEventProcessor {
                 // status, batch size, content size, attached messages
 //                Arguments.of(Event.Status.PASSED, 1, 500, 100),
 //                Arguments.of(Event.Status.PASSED, 10, 500, 100),
-                Arguments.of(Event.Status.PASSED, 100, 500, 100)
+                Arguments.of(Event.Status.PASSED, 100, 500, 5),
+                Arguments.of(Event.Status.PASSED, 5, 2500, 4)
 //                Arguments.of(Event.Status.PASSED, 1000, 500, 100)
         );
     }
@@ -376,7 +386,7 @@ public class IntegrationTestEventProcessor {
 
             this.preparation = toProto - start;
             this.packToProto = toPacket - toProto;
-            this.processing = complete - toPacket;
+            this.processing = complete - toSend;
             this.rate = 1_000_000_000D/this.processing;
         }
 

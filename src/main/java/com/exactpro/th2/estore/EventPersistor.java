@@ -18,7 +18,7 @@ package com.exactpro.th2.estore;
 import com.exactpro.cradle.CradleStorage;
 import com.exactpro.cradle.errors.BookNotFoundException;
 import com.exactpro.cradle.errors.PageNotFoundException;
-import com.exactpro.cradle.testevents.TestEventToStore;
+import com.exactpro.cradle.testevents.StoredTestEventIdUtils;
 import com.exactpro.cradle.utils.CradleStorageException;
 import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import com.exactpro.th2.taskutils.FutureTracker;
@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
 import static java.util.Objects.requireNonNull;
 
-public class EventPersistor implements Runnable, Persistor<TestEventToStore>, AutoCloseable {
+public class EventPersistor implements Runnable, Persistor<IEventWrapper>, AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
@@ -73,7 +73,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
-        this.samplerService = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
+        this.samplerService = Executors.newScheduledThreadPool(3, THREAD_FACTORY); // FIXME: make thread count configurable
     }
 
 
@@ -104,6 +104,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         while (!stopped) {
             try {
                 ScheduledRetryableTask<PersistenceTask> task = taskQueue.awaitScheduled();
+                StoredTestEventIdUtils.track(task.getPayload().eventWrapper.id(), "awaited task");
                     try {
                         processTask(task);
                     } catch (Exception e) {
@@ -112,6 +113,8 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
             } catch (InterruptedException ie) {
                 LOGGER.debug("Received InterruptedException. aborting");
                 break;
+            } catch (Exception e) {
+                LOGGER.error(e.getMessage(), e);
             }
         }
     }
@@ -124,7 +127,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         task.getPayload().fail();
     }
 
-    private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
+    private void resolveTaskError(ScheduledRetryableTask<PersistenceTask> task, Throwable e) throws CradleStorageException {
         if (e instanceof BookNotFoundException || e instanceof PageNotFoundException) {
             // If following exceptions were thrown there's no point in retrying
             String message = String.format("Can't retry after %s exception", e.getClass().getSimpleName());
@@ -136,29 +139,12 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
 
     @Override
-    public void persist(TestEventToStore event, Callback<TestEventToStore> callback) {
+    public void persist(IEventWrapper event, Callback<IEventWrapper> callback) {
         metrics.takeQueueMeasurements();
         PersistenceTask task = new PersistenceTask(event, callback);
-        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));
-    }
-
-
-    public long getEventContentSize(TestEventToStore event) {
-        if (event.isSingle())
-            return event.asSingle().getContent().length;
-        else if (event.isBatch())
-            return event.asBatch().getBatchSize();
-        else
-            throw new IllegalArgumentException(String.format("Unknown event class (%s)", event.getClass().getSimpleName()));
-    }
-
-    private int getEventCount(TestEventToStore event) {
-        if (event.isSingle())
-            return 1;
-        else if (event.isBatch())
-            return event.asBatch().getTestEventsCount();
-        else
-            throw new IllegalArgumentException(String.format("Unknown event class (%s)", event.getClass().getSimpleName()));
+        StoredTestEventIdUtils.track(event.id(), "submitting task");
+        taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, event.size(), task));
+        StoredTestEventIdUtils.track(event.id(), "submitted task");
     }
 
 
@@ -178,40 +164,65 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
     void processTask(ScheduledRetryableTask<PersistenceTask> task) throws IOException, CradleStorageException {
 
-        final TestEventToStore event = task.getPayload().eventBatch;
+        final IEventWrapper eventWrapper = task.getPayload().eventWrapper;
         final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
-        CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
-                .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
+
+        StoredTestEventIdUtils.track(eventWrapper.id(), "wait conversion");
+        CompletableFuture<Void> result = CompletableFuture.supplyAsync(() -> {
+            try(AutoCloseable ignored = StoredTestEventIdUtils.Statistic.measure("convert")) {
+                StoredTestEventIdUtils.track(eventWrapper.id(), "converting");
+                return eventWrapper.get();
+            } catch (Exception e) {
+                LOGGER.error(e.getMessage(), e);
+                throw new RuntimeException(e);
+            } finally {
+                StoredTestEventIdUtils.track(eventWrapper.id(), "converted");
+            }
+        }, samplerService)
+                .thenComposeAsync(event ->
+                        {
+                            try {
+                                return cradleStorage.storeTestEventAsync(event)
+                                        .thenApply(ignored -> event);
+                            } catch (IOException | CradleStorageException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }, samplerService)
+                .thenAccept(event -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
                 .whenCompleteAsync((unused, ex) ->
                     {
-                        timer.observeDuration();
-                        if (ex != null) {
-                            resolveTaskError(task, ex);
-                        } else {
-                            taskQueue.complete(task);
-                            metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
-                            task.getPayload().complete();
+                        try {
+                            timer.observeDuration();
+                            if (ex != null) {
+                                    resolveTaskError(task, ex);
+                            } else {
+                                taskQueue.complete(task);
+                                metrics.updateEventMeasurements(eventWrapper.count(), task.getPayloadSize());
+                                task.getPayload().complete();
+                                StoredTestEventIdUtils.track(eventWrapper.id(), "completed");
+                            }
+                        } catch (CradleStorageException e) {
+                            throw new RuntimeException(e);
                         }
-                    }
-                    , samplerService
+                    }, samplerService
                 );
 
         futures.track(result);
     }
 
 
-    private void logAndRetry(ScheduledRetryableTask<PersistenceTask> task, Throwable e) {
+    private void logAndRetry(ScheduledRetryableTask<PersistenceTask> task, Throwable e) throws CradleStorageException {
 
         metrics.registerPersistenceFailure();
         int retriesDone = task.getRetriesDone() + 1;
 
         final PersistenceTask persistenceTask  = task.getPayload();
-        final TestEventToStore eventBatch = persistenceTask.eventBatch;
+        final IEventWrapper eventBatch = persistenceTask.eventWrapper;
 
         if (task.getRetriesLeft() > 0) {
             errorCollector.collect("Failed to store an event batch, rescheduling");
             LOGGER.error("Failed to store the event batch id '{}', {} retries left, rescheduling",
-                    eventBatch.getId(),
+                    eventBatch.get().getId(),
                     task.getRetriesLeft(),
                     e);
             taskQueue.retry(task);
@@ -221,7 +232,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
             logAndFail(task,
                     "Failed to store an event batch, aborting after several executions",
                     String.format("Failed to store the event batch id '%s', aborting after %d executions",
-                            eventBatch.getId(),
+                            eventBatch.get().getId(),
                             retriesDone),
                     e);
         }
@@ -229,22 +240,22 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
 
     static class PersistenceTask {
-        final TestEventToStore eventBatch;
-        final Callback<TestEventToStore> callback;
+        final IEventWrapper eventWrapper;
+        final Callback<IEventWrapper> callback;
 
-        PersistenceTask(TestEventToStore eventBatch, Callback<TestEventToStore> callback) {
-            this.eventBatch = eventBatch;
+        PersistenceTask(IEventWrapper eventWrapper, Callback<IEventWrapper> callback) {
+            this.eventWrapper = eventWrapper;
             this.callback = callback;
         }
 
         void complete () {
             if (callback != null)
-                callback.onSuccess(eventBatch);
+                callback.onSuccess(eventWrapper);
         }
 
         void fail() {
             if (callback != null)
-                callback.onFail(eventBatch);
+                callback.onFail(eventWrapper);
         }
     }
 }

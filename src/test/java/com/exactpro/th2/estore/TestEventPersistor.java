@@ -52,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
+import static com.exactpro.th2.estore.IEventWrapper.wrap;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -87,7 +88,7 @@ public class TestEventPersistor {
     private final ErrorCollector errorCollector = mock(ErrorCollector.class);
 
     @SuppressWarnings("unchecked")
-    private final Callback<TestEventToStore> callback = mock(Callback.class);
+    private final Callback<IEventWrapper> callback = mock(Callback.class);
     private EventPersistor persistor;
 
     private CradleEntitiesFactory cradleEntitiesFactory;
@@ -117,7 +118,7 @@ public class TestEventPersistor {
         StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
 
         TestEventSingleToStore event = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12);
-        persistor.persist(event, callback);
+        persistor.persist(wrap(event), callback);
 
         Thread.sleep(EVENT_PERSIST_TIMEOUT);
 
@@ -137,7 +138,7 @@ public class TestEventPersistor {
     public void testEventBatch() throws IOException, CradleStorageException, InterruptedException {
 
         TestEventBatchToStore eventBatch = createEventBatch1();
-        persistor.persist(eventBatch, callback);
+        persistor.persist(wrap(eventBatch), callback);
 
         Thread.sleep(EVENT_PERSIST_TIMEOUT * 2);
 
@@ -162,7 +163,7 @@ public class TestEventPersistor {
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         TestEventBatchToStore eventBatch = createEventBatch1();
-        persistor.persist(eventBatch, callback);
+        persistor.persist(wrap(eventBatch), callback);
 
         Thread.sleep(EVENT_PERSIST_TIMEOUT * 2);
 
@@ -186,8 +187,8 @@ public class TestEventPersistor {
             os = os.thenReturn(CompletableFuture.failedFuture(new IOException("event persistence failure")));
         os.thenReturn(CompletableFuture.completedFuture(null));
 
-        TestEventToStore eventBatch = createEventBatch1();
-        persistor.persist(eventBatch, callback);
+        TestEventBatchToStore eventBatch = createEventBatch1();
+        persistor.persist(wrap(eventBatch), callback);
 
         Thread.sleep(EVENT_PERSIST_TIMEOUT * (MAX_EVENT_PERSIST_RETRIES + 1));
 
@@ -215,7 +216,7 @@ public class TestEventPersistor {
         // create executor with thread pool size > event queue size to avoid free thread waiting
         final ExecutorService executor = Executors.newFixedThreadPool(MAX_EVENT_QUEUE_TASK_SIZE * 2);
 
-        TestEventToStore eventBatch = createEventBatch1();
+        TestEventBatchToStore eventBatch = createEventBatch1();
 
         when(storageMock.storeTestEventAsync(any()))
                 .thenAnswer((ignored) ->  CompletableFuture.runAsync(() -> pause(storeExecutionTime), executor));
@@ -223,7 +224,7 @@ public class TestEventPersistor {
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
             for (int i = 0; i < totalEvents; i++)
-                persistor.persist(eventBatch, callback);
+                persistor.persist(wrap(eventBatch), callback);
         });
 
         new Thread(runnable).start();
@@ -260,7 +261,7 @@ public class TestEventPersistor {
         Instant timestamp = Instant.now();
         StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
 
-        TestEventToStore[] events = new TestEventToStore[totalEvents];
+        TestEventSingleToStore[] events = new TestEventSingleToStore[totalEvents];
         for (int i = 0; i < totalEvents; i++)
             events[i] = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 12, content);
 
@@ -270,7 +271,7 @@ public class TestEventPersistor {
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
             for (int i = 0; i < totalEvents; i++)
-                persistor.persist(events[i], callback);
+                persistor.persist(wrap(events[i]), callback);
         });
 
         new Thread(runnable).start();
@@ -307,9 +308,9 @@ public class TestEventPersistor {
         }
     }
 
-    private static Map<StoredTestEventId, TestEventSingle> mapOf(Collection<BatchedStoredTestEvent> collection) {
+    private static Map<StoredTestEventId, TestEventSingleToStore> mapOf(Collection<TestEventSingleToStore> collection) {
         if (collection != null)
-            return collection.stream().collect(Collectors.toMap(BatchedStoredTestEvent::getId, v -> v));
+            return collection.stream().collect(Collectors.toMap(TestEventSingleToStore::getId, v -> v));
         else
             return Collections.emptyMap();
     }
@@ -342,9 +343,9 @@ public class TestEventPersistor {
         }
 
         if (expected.isBatch()) {
-            assertEquals(expected.asBatch().getTestEventsCount(), actual.asBatch().getTestEventsCount());
-            Map<StoredTestEventId, TestEventSingle> expectedEvents = mapOf(expected.asBatch().getTestEvents());
-            Map<StoredTestEventId, TestEventSingle> actualEvents = mapOf(actual.asBatch().getTestEvents());
+            assertEquals(expected.asBatch().getTestEventsCount(), actual.asBatch().getTestEvents().size());
+            Map<StoredTestEventId, TestEventSingleToStore> expectedEvents = mapOf(expected.asBatch().getTestEvents());
+            Map<StoredTestEventId, TestEventSingleToStore> actualEvents = mapOf(actual.asBatch().getTestEvents());
 
             for (TestEventSingle expectedSingle : expectedEvents.values()) {
                 StoredTestEventId id = expectedSingle.getId();
