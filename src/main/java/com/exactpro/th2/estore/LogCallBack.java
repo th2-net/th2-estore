@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023-2024 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package com.exactpro.th2.estore;
 
-import com.exactpro.cradle.testevents.TestEventBatchToStore;
-import com.exactpro.cradle.testevents.TestEventToStore;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.event.Level;
@@ -24,7 +22,7 @@ import org.slf4j.spi.LoggingEventBuilder;
 
 import static java.util.Objects.requireNonNull;
 
-class LogCallBack implements Callback<TestEventToStore> {
+class LogCallBack implements Callback<IEventWrapper> {
     private final LoggingEventBuilder loggingEventBuilder;
     private final boolean loggerEnabled;
 
@@ -34,26 +32,16 @@ class LogCallBack implements Callback<TestEventToStore> {
         this.loggerEnabled = logger.isEnabledForLevel(level);
     }
     @Override
-    public void onSuccess(TestEventToStore data) {
+    public void onSuccess(IEventWrapper data) {
         if (loggerEnabled) {
-            if (data.isBatch()) {
-                TestEventBatchToStore batch = data.asBatch();
-                loggingEventBuilder.log("Stored the {} test event batch with errors, events: {}, size: {} bytes", batch.getId(), batch.getTestEventsCount(), batch.getBatchSize());
-            } else {
-                loggingEventBuilder.log("Stored the {} test event with error", data.getId());
-            }
+            loggingEventBuilder.log("Stored the {} test event single/batch with error", data.id());
         }
     }
 
     @Override
-    public void onFail(TestEventToStore data) {
+    public void onFail(IEventWrapper data) {
         if (loggerEnabled) {
-            if (data.isBatch()) {
-                TestEventBatchToStore batch = data.asBatch();
-                loggingEventBuilder.log("Storing of the {} test event batch with errors failed, events: {}, size: {} bytes", batch.getId(), batch.getTestEventsCount(), batch.getBatchSize());
-            } else {
-                loggingEventBuilder.log("Storing of the {} test event with error failed", data.getId());
-            }
+            loggingEventBuilder.log("Storing of the {} test event single/batch with error failed", data.id());
         }
     }
 }

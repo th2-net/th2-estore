@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -15,20 +15,14 @@
 
 package com.exactpro.th2.estore;
 
-import com.exactpro.cradle.BookId;
 import com.exactpro.cradle.CradleEntitiesFactory;
-import com.exactpro.cradle.testevents.TestEventBatchToStore;
-import com.exactpro.cradle.testevents.TestEventSingleToStore;
-import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
-import com.exactpro.cradle.testevents.TestEventToStore;
-import com.exactpro.cradle.utils.CradleStorageException;
+import com.exactpro.cradle.testevents.StoredTestEventIdUtils;
 import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
-import com.exactpro.th2.common.grpc.EventOrBuilder;
-import com.exactpro.th2.common.schema.message.*;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
-import com.exactpro.th2.common.util.StorageUtils;
+import com.exactpro.th2.common.schema.message.MessageRouter;
+import com.exactpro.th2.common.schema.message.QueueAttribute;
+import com.exactpro.th2.common.schema.message.SubscriberMonitor;
 import com.google.protobuf.TextFormat;
 import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
@@ -40,8 +34,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
+import static com.exactpro.cradle.testevents.StoredTestEventIdUtils.track;
 import static com.google.protobuf.TextFormat.shortDebugString;
 import static java.util.Objects.requireNonNull;
 
@@ -51,14 +45,14 @@ public class EventProcessor implements AutoCloseable {
     private final ErrorCollector errorCollector;
     private final MessageRouter<EventBatch> router;
     private final CradleEntitiesFactory entitiesFactory;
-    private final Persistor<TestEventToStore> persistor;
+    private final Persistor<IEventWrapper> persistor;
     private SubscriberMonitor monitor;
     private final EventProcessorMetrics metrics;
 
     public EventProcessor(@NotNull ErrorCollector errorCollector,
                           @NotNull MessageRouter<EventBatch> router,
                           @NotNull CradleEntitiesFactory entitiesFactory,
-                          @NotNull Persistor<TestEventToStore> persistor) {
+                          @NotNull Persistor<IEventWrapper> persistor) {
         this.errorCollector = requireNonNull(errorCollector, "Error collector can't be null");
         this.router = requireNonNull(router, "Message router can't be null");
         this.entitiesFactory = requireNonNull(entitiesFactory, "Cradle entity factory can't be null");
@@ -84,6 +78,7 @@ public class EventProcessor implements AutoCloseable {
 
 
     public void process(EventBatch eventBatch, Confirmation confirmation) {
+        StoredTestEventIdUtils.track(eventBatch.getEvents(0).getId().getId(), "start process");
         List<Event> events = eventBatch.getEventsList();
         if (events.isEmpty()) {
             if (LOGGER.isWarnEnabled())
@@ -111,12 +106,12 @@ public class EventProcessor implements AutoCloseable {
 
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
-        Callback<TestEventToStore> persistorCallback = new ProcessorCallback(confirmation, events.size());
+        Callback<IEventWrapper> persistorCallback = new ProcessorCallback(confirmation, events.size());
 
         events.forEach((event) -> {
             try {
-                TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
-                persist(cradleEventSingle, persistorCallback);
+                IEventWrapper eventWrapper = IEventWrapper.wrap(entitiesFactory, event);
+                persist(eventWrapper, persistorCallback);
             } catch (Exception e) {
                 errorCollector.collect("Failed to process a single event");
                 if (LOGGER.isErrorEnabled()) {
@@ -132,15 +127,15 @@ public class EventProcessor implements AutoCloseable {
     private void storeEventBatch(EventBatch eventBatch, Confirmation confirmation) {
 
         try {
-            TestEventBatchToStore cradleBatch = toCradleBatch(eventBatch);
-            persist(cradleBatch, new Callback<>() {
+            IEventWrapper eventWrapper = IEventWrapper.wrap(entitiesFactory, eventBatch);
+            persist(eventWrapper, new Callback<>() {
                 @Override
-                public void onSuccess(TestEventToStore data) {
+                public void onSuccess(IEventWrapper data) {
                     confirm(confirmation);
                 }
 
                 @Override
-                public void onFail(TestEventToStore data) {
+                public void onFail(IEventWrapper data) {
                     reject(confirmation);
                 }
             });
@@ -178,53 +173,15 @@ public class EventProcessor implements AutoCloseable {
     }
 
 
-    private void persist(TestEventToStore data, Callback<TestEventToStore> callback) throws Exception {
+    private void persist(IEventWrapper eventWrapper, Callback<IEventWrapper> callback) throws Exception {
         try (Histogram.Timer ignored = metrics.startMeasuringPersistenceLatency()) {
-            persistor.persist(data, callback);
+            persistor.persist(eventWrapper, callback);
         }
     }
 
-
-    public TestEventSingleToStore toCradleEvent(EventOrBuilder protoEvent) throws CradleStorageException {
-        TestEventSingleToStoreBuilder builder = entitiesFactory
-                .testEventBuilder()
-                .id(ProtoUtil.toCradleEventID(protoEvent.getId()))
-                .name(protoEvent.getName())
-                .type(protoEvent.getType())
-                .success(ProtoUtil.isSuccess(protoEvent.getStatus()))
-                .messages(protoEvent.getAttachedMessageIdsList().stream()
-                        .map(ProtoUtil::toStoredMessageId)
-                        .collect(Collectors.toSet()))
-                .content(protoEvent.getBody().toByteArray());
-        if (protoEvent.hasParentId()) {
-            builder.parentId(ProtoUtil.toCradleEventID(protoEvent.getParentId()));
-        }
-        if (protoEvent.hasEndTimestamp()) {
-            builder.endTimestamp(StorageUtils.toInstant(protoEvent.getEndTimestamp()));
-        }
-        return builder.build();
-    }
-
-
-    private TestEventBatchToStore toCradleBatch(EventBatchOrBuilder protoEventBatch) throws CradleStorageException {
-        TestEventBatchToStore cradleEventBatch = entitiesFactory.testEventBatchBuilder()
-                .id(
-                        new BookId(protoEventBatch.getParentEventId().getBookName()),
-                        protoEventBatch.getParentEventId().getScope(),
-                        StorageUtils.toInstant(ProtoUtil.getMinStartTimestamp(protoEventBatch.getEventsList())),
-                        Util.generateId()
-                )
-                .parentId(ProtoUtil.toCradleEventID(protoEventBatch.getParentEventId()))
-                .build();
-        for (Event protoEvent : protoEventBatch.getEventsList()) {
-            cradleEventBatch.addTestEvent(toCradleEvent(protoEvent));
-        }
-        return cradleEventBatch;
-    }
-
-    private class ProcessorCallback implements Callback<TestEventToStore> {
+    private class ProcessorCallback implements Callback<IEventWrapper> {
         private final AtomicBoolean responded = new AtomicBoolean(false);
-        private final Map<TestEventToStore, TestEventToStore> completed = new ConcurrentHashMap<>();
+        private final Map<IEventWrapper, IEventWrapper> completed = new ConcurrentHashMap<>();
         private final Confirmation confirmation;
         private final int eventCount;
 
@@ -234,18 +191,18 @@ public class EventProcessor implements AutoCloseable {
         }
 
         @Override
-        public void onSuccess(TestEventToStore persistedEvent) {
-            completed.put(persistedEvent, persistedEvent);
+        public void onSuccess(IEventWrapper eventWrapper) {
+            completed.put(eventWrapper, eventWrapper);
             if (completed.size() == eventCount) {
                 checkAndRespond(responded, () -> confirm(confirmation));
             }
         }
 
         @Override
-        public void onFail(TestEventToStore persistedEvent) {
+        public void onFail(IEventWrapper eventWrapper) {
             checkAndRespond(responded, () -> reject(confirmation));
-            if (persistedEvent != null) {
-                completed.put(persistedEvent, persistedEvent);
+            if (eventWrapper != null) {
+                completed.put(eventWrapper, eventWrapper);
             }
         }
 

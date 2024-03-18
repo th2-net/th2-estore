@@ -105,15 +105,15 @@ public class EventStore {
                 boxConfiguration.getBoxName(),
                 now,
                 Util.generateId());
-        TestEventSingleToStore eventToStore = entitiesFactory.testEventBuilder()
+        IEventWrapper eventWrapper = IEventWrapper.wrap(entitiesFactory.testEventBuilder()
                 .id(rootEventId)
                 .name(boxConfiguration.getBoxName() + " " + now)
                 .type("Microservice")
                 .success(true)
                 .endTimestamp(now)
                 .content(new byte[0])
-                .build();
-        persistor.persist(eventToStore, new LogCallBack(LOGGER, Level.INFO));
+                .build());
+        persistor.persist(eventWrapper, new LogCallBack(LOGGER, Level.INFO));
         return rootEventId;
     }
 

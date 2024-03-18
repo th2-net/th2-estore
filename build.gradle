@@ -12,6 +12,7 @@ plugins {
     id "org.owasp.dependencycheck" version "9.0.9"
     id 'com.github.jk1.dependency-license-report' version '2.5'
     id "de.undercouch.download" version "5.4.0"
+    id "me.champeau.jmh" version "0.7.2"
 }
 
 ext {
@@ -64,6 +65,14 @@ jar {
                 'Implementation-Version': project.version
         )
     }
+}
+
+jmh {
+    jmhTimeout = "1m"
+    iterations = 3
+    fork = 2
+    warmupIterations = 3
+    warmupForks = 2
 }
 
 configurations.configureEach {
@@ -182,13 +191,18 @@ dependencies {
         because("Error collector serialise Instant values")
     }
 
+    jmh 'org.openjdk.jmh:jmh-core:1.37'
+    jmh 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
+
     testImplementation 'org.apache.commons:commons-lang3'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
+    testImplementation 'com.exactpro.th2:junit-jupiter-integration:0.0.1-master-6956603819-5241ee5-SNAPSHOT'
 }
 
 test {
     useJUnitPlatform()
+    maxHeapSize = "3G"
 }
 
 application {
