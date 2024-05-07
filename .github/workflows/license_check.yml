@@ -15,10 +15,10 @@ jobs:
     name: Prebuild Job
     uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
     with:
-      runsOn: 'ubuntu-20.04'
+      runsOn: 'ubuntu-22.04'
 
   check_licenses:
-    runs-on: 'ubuntu-20.04'
+    runs-on: 'ubuntu-22.04'
     needs: [prebuild-job]
 
     steps:
@@ -58,8 +58,3 @@ jobs:
       with:
         name: licenses_check-${{ steps.meta.outputs.REPOSITORY_NAME }}-${{ needs.prebuild-job.outputs.version }}
         path: ./licenses_check/
-
-#    - name: Set workflow status
-#      run: echo "::set-output name=status::Failure"
-#      if: steps.set_status.outputs.result == 'FAILED due to unknown licenses found'
-#      continue-on-error: false
