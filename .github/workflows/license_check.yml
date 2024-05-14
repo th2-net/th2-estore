@@ -11,10 +11,10 @@ jobs:
     name: Prebuild Job
     uses: th2-net/.github/.github/workflows/compound-prebuild-java-dev-workflow.yml@main
     with:
-      runsOn: 'ubuntu-22.04'
+      runsOn: 'ubuntu-latest'
 
   check_licenses:
-    runs-on: 'ubuntu-22.04'
+    runs-on: 'ubuntu-latest'
     needs: [prebuild-job]
 
     steps:
