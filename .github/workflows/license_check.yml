@@ -1,6 +1,7 @@
 name: Licenses checks
 
-on: workflow_dispatch
+on: 
+  pull_request:
 
 jobs:
   build:
