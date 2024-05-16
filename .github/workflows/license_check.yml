@@ -1,8 +1,0 @@
-name: Licenses checks
-
-on: 
-  pull_request:
-
-jobs:
-  build:
-    uses: th2-net/.github/.github/workflows/license_check.yml@main
