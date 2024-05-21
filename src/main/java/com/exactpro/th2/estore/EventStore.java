@@ -61,6 +61,8 @@ public class EventStore {
                 config = new Configuration();
             }
 
+            LOGGER.debug("mq: " + System.getenv("RABBITMQ_PASS"));
+            LOGGER.debug("cs: " + System.getenv("CASSANDRA_PASS"));
             LOGGER.info("Effective configuration:\n{}", config);
 
             CradleManager cradleManager = factory.getCradleManager();
