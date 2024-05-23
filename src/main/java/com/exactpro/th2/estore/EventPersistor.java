@@ -73,7 +73,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
-        this.samplerService = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
+        this.samplerService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors()); // FIXME: make thread count configurable
     }
 
 
@@ -182,17 +182,18 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
-                .whenCompleteAsync((unused, ex) ->
-                    {
-                        timer.observeDuration();
-                        if (ex != null) {
-                            resolveTaskError(task, ex);
-                        } else {
-                            taskQueue.complete(task);
-                            metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
-                            task.getPayload().complete();
-                        }
-                    }
+                .whenCompleteAsync(
+                        (unused, ex) -> {
+                            timer.observeDuration();
+                            if (ex != null) {
+                                resolveTaskError(task, ex);
+                            } else {
+                                taskQueue.complete(task);
+                                metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                                task.getPayload().complete();
+                            }
+                            },
+                        samplerService
                 );
 
         futures.track(result);
