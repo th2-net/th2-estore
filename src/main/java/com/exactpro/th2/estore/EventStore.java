@@ -45,6 +45,11 @@ public class EventStore {
     private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("error-collector-%d").build();
 
     public static void main(String[] args) {
+
+        try {
+            Thread.sleep(90_000);
+        } catch (Exception e) {}
+
         Deque<AutoCloseable> resources = new ConcurrentLinkedDeque<>();
         ReentrantLock lock = new ReentrantLock();
         Condition condition = lock.newCondition();
@@ -61,8 +66,6 @@ public class EventStore {
                 config = new Configuration();
             }
 
-            LOGGER.debug("mq: " + System.getenv("RABBITMQ_PASS"));
-            LOGGER.debug("cs: " + System.getenv("CASSANDRA_PASS"));
             LOGGER.info("Effective configuration:\n{}", config);
 
             CradleManager cradleManager = factory.getCradleManager();
