@@ -9,13 +9,13 @@ plugins {
     id 'java-library'
     id 'application'
     id 'com.palantir.docker' version '0.25.0'
-    id "org.owasp.dependencycheck" version "9.0.9"
-    id 'com.github.jk1.dependency-license-report' version '2.5'
-    id "de.undercouch.download" version "5.4.0"
+    id "org.owasp.dependencycheck" version "9.0.10"
+    id 'com.github.jk1.dependency-license-report' version '2.8'
+    id "de.undercouch.download" version "5.6.0"
 }
 
 ext {
-    cradleVersion = '5.2.0-dev'
+    cradleVersion = '5.3.0-TH2-5204-external-executor-9253493062-8d1f455-SNAPSHOT'
 }
 
 group = 'com.exactpro.th2'
@@ -161,12 +161,12 @@ signing {
 }
 
 dependencies {
-    api platform('com.exactpro.th2:bom:4.6.0')
-    implementation 'com.exactpro.th2:common:5.9.1-dev'
-    implementation("com.exactpro.th2:common-utils:2.2.2-dev") {
+    api platform('com.exactpro.th2:bom:4.6.1')
+    implementation 'com.exactpro.th2:common:5.11.1-dev'
+    implementation("com.exactpro.th2:common-utils:2.2.3-dev") {
         because("executor service utils is used")
     }
-    implementation 'com.exactpro.th2:task-utils:0.1.1'
+    implementation 'com.exactpro.th2:task-utils:0.1.2'
     implementation "com.exactpro.th2:cradle-core:$cradleVersion"
     implementation "com.exactpro.th2:cradle-cassandra:$cradleVersion"
 
@@ -184,7 +184,7 @@ dependencies {
 
     testImplementation 'org.apache.commons:commons-lang3'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
 }
 
 test {
