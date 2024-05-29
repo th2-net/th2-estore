@@ -1,10 +1,6 @@
 plugins {
     id "application"
-    id "com.exactpro.th2.gradle.component" version "0.0.6"
-}
-
-ext {
-    cradleVersion = '5.3.0-dev'
+    id "com.exactpro.th2.gradle.component" version "0.0.8"
 }
 
 group = 'com.exactpro.th2'
@@ -13,18 +9,21 @@ version = release_version
 sourceCompatibility = 11
 targetCompatibility = 11
 
+ext {
+    cradleVersion = '5.3.0-dev'
+}
+
 repositories {
     mavenCentral()
-
     maven {
         name 'Sonatype_snapshots'
         url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
     }
-
     maven {
         name 'Sonatype_releases'
         url 'https://s01.oss.sonatype.org/content/repositories/releases/'
     }
+    mavenLocal()
 
     configurations.configureEach {
         resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
@@ -37,7 +36,7 @@ javadoc {
 }
 
 dependencies {
-    implementation('com.exactpro.th2:common:5.11.0-dev') {
+    implementation('com.exactpro.th2:common:5.12.0-dev') {
         exclude group: 'com.exactpro.th2', module: 'cradle-core'
         exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
     }
@@ -65,14 +64,14 @@ dependencies {
     testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
 }
 
-test {
-    useJUnitPlatform()
-}
-
 application {
     mainClassName 'com.exactpro.th2.estore.EventStore'
 }
 
+test {
+    useJUnitPlatform()
+}
+
 dependencyCheck {
-    suppressionFile = file('suppressions.xml')
+    suppressionFile='suppressions.xml'
 }
