@@ -1,8 +1,6 @@
 plugins {
-    id("java")
-    id("maven-publish")
-
-    id "com.exactpro.th2.gradle.component" version "0.0.7"
+    id "application"
+    id "com.exactpro.th2.gradle.component" version "0.0.8"
 }
 
 group = 'com.exactpro.th2'
@@ -38,7 +36,10 @@ javadoc {
 }
 
 dependencies {
-    implementation 'com.exactpro.th2:common:5.11.1-dev'
+    implementation('com.exactpro.th2:common:5.12.0-dev') {
+        exclude group: 'com.exactpro.th2', module: 'cradle-core'
+        exclude group: 'com.exactpro.th2', module: 'cradle-cassandra'
+    }
     implementation("com.exactpro.th2:common-utils:2.2.3-dev") {
         because("executor service utils is used")
     }
@@ -72,5 +73,5 @@ test {
 }
 
 dependencyCheck {
-    suppressionFile='supressions.xml'
+    suppressionFile='suppressions.xml'
 }
