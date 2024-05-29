@@ -83,11 +83,6 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 ## 5.5.0
 
-* Updated common-utils: `2.2.3-dev`
-* Updated cradle api: `5.3.0-dev`
-
-## 5.5.0
-
 * Updated bom: `4.6.0`
 * Updated common: `5.9.1-dev`
 
