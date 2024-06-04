@@ -95,10 +95,10 @@ Processing speed (K events/sec) vs batch size for estore:
 
 Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount value should be used (e.g. 1000) to achieve these results.
 
-
 # Changes
 
 ## 5.7.0
+
 * Using separate executor instead of ForkJoinPool.commonPool() when storing events
 * Updated cradle api: `5.4.0-dev`
 

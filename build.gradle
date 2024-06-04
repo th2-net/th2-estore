@@ -10,7 +10,7 @@ sourceCompatibility = 11
 targetCompatibility = 11
 
 ext {
-    cradleVersion = '5.4.0-TH2-5204-external-executor-9362616892-3150d14-SNAPSHOT'
+    cradleVersion = '5.4.0-TH2-5204-external-executor-9367305817-5697938-SNAPSHOT'
 }
 
 repositories {
