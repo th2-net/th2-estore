@@ -1,4 +1,4 @@
-# Overview (5.6.0)
+# Overview (5.7.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -98,8 +98,16 @@ Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount v
 
 # Changes
 
-## 5.6.0
+## 5.7.0
 * Using separate executor instead of ForkJoinPool.commonPool() when storing events
+* Updated cradle api: `5.4.0-dev`
+
+## 5.6.0
+
+* Migrated to th2 gradle plugin `0.0.8`
+* Updated bom: `4.6.1`
+* Updated common: `5.12.0-dev`
+* Updated common-utils: `2.2.3-dev`
 * Updated cradle api: `5.3.0-dev`
 
 ## 5.5.0
