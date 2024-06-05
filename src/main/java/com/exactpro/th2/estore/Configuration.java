@@ -16,6 +16,7 @@
 package com.exactpro.th2.estore;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class Configuration {
     private static final int DEFAULT_MAX_TASK_RETRIES = 1000000;
@@ -23,54 +24,56 @@ public class Configuration {
     private static final long DEFAULT_RETRY_DELAY_BASEM_S = 5000;
     private static final int DEFAULT_PROCESSING_THREADS = Runtime.getRuntime().availableProcessors();
 
-    private Integer maxTaskCount;
-    private Long maxTaskDataSize;
-    private Integer maxRetryCount;
-    private Long retryDelayBase;
-    private Integer processingThreads;
-
-    public Long getMaxTaskDataSize() {
-        return maxTaskDataSize == null ? defaultMaxDataSize() : maxTaskDataSize;
-    }
-
-    public Integer getMaxTaskCount() {
-        return maxTaskCount == null ? DEFAULT_MAX_TASK_COUNT : maxTaskCount;
-    }
-
-    public Integer getMaxRetryCount() {
-        return maxRetryCount == null ? DEFAULT_MAX_TASK_RETRIES : maxRetryCount;
-    }
-
-    public Long getRetryDelayBase() {
-        return retryDelayBase == null ? DEFAULT_RETRY_DELAY_BASEM_S : retryDelayBase;
-    }
-
-    public int getProcessingThreads() {
-        return processingThreads == null ? DEFAULT_PROCESSING_THREADS : processingThreads;
-    }
+    private final int maxTaskCount;
+    private final long maxTaskDataSize;
+    private final int maxRetryCount;
+    private final long retryDelayBase;
+    private final int processingThreads;
 
     public Configuration() {
-        this(DEFAULT_MAX_TASK_COUNT, DEFAULT_MAX_TASK_RETRIES, DEFAULT_RETRY_DELAY_BASEM_S,
-                defaultMaxDataSize(), DEFAULT_PROCESSING_THREADS);
+        this(DEFAULT_MAX_TASK_COUNT, defaultMaxDataSize(), DEFAULT_MAX_TASK_RETRIES,
+                DEFAULT_RETRY_DELAY_BASEM_S, DEFAULT_PROCESSING_THREADS);
     }
 
     @JsonCreator
-    public Configuration(Integer maxTaskCount, Integer maxTaskRetries, Long taskRetryDelayBase,
-                         Long maxTaskDataSize, Integer processingThreads) {
-        this.maxTaskCount = maxTaskCount;
-        this.maxRetryCount = maxTaskRetries;
-        this.retryDelayBase = taskRetryDelayBase;
-        this.maxTaskDataSize = maxTaskDataSize;
-        this.processingThreads = processingThreads;
-        validate();
+    public Configuration(
+            @JsonProperty("maxTaskCount") Integer maxTaskCount,
+            @JsonProperty("maxTaskDataSize") Long maxTaskDataSize,
+            @JsonProperty("maxRetryCount") Integer maxRetryCount,
+            @JsonProperty ("retryDelayBase") Long retryDelayBase,
+            @JsonProperty("processingThreads") Integer processingThreads
+    ) {
+        this.maxTaskCount = maxTaskCount == null ? DEFAULT_MAX_TASK_COUNT : maxTaskCount;
+        this.maxTaskDataSize = maxTaskDataSize == null ? defaultMaxDataSize() : maxTaskDataSize;
+        this.maxRetryCount = maxRetryCount == null ? DEFAULT_MAX_TASK_RETRIES : maxRetryCount;
+        this.retryDelayBase = retryDelayBase == null ? DEFAULT_RETRY_DELAY_BASEM_S : retryDelayBase;
+        this.processingThreads = processingThreads == null ? DEFAULT_PROCESSING_THREADS : processingThreads;
+
+        if (this.maxTaskCount <= 1) throw new IllegalArgumentException("'maxTaskCount' should be >=1. Actual: " + maxTaskCount);
+        if (this.maxTaskDataSize <= 1) throw new IllegalArgumentException("'maxTaskDataSize' should be >=1. Actual: " + maxTaskDataSize);
+        if (this.maxRetryCount <= 0) throw new IllegalArgumentException("'maxRetryCount' should be >=0. Actual: " + maxRetryCount);
+        if (this.retryDelayBase <= 1) throw new IllegalArgumentException("'retryDelayBase' should be >=1. Actual: " + retryDelayBase);
+        if (this.processingThreads <= 1) throw new IllegalArgumentException("'processingThreads' should be >=1. Actual: " + processingThreads);
     }
 
-    public void validate() {
-        if (maxTaskCount <= 1) throw new IllegalArgumentException("'maxTaskCount' should be >=1. Actual: " + maxTaskCount);
-        if (maxTaskDataSize <= 1) throw new IllegalArgumentException("'maxTaskDataSize' should be >=1. Actual: " + maxTaskDataSize);
-        if (maxRetryCount <= 0) throw new IllegalArgumentException("'maxRetryCount' should be >=0. Actual: " + maxRetryCount);
-        if (retryDelayBase <= 1) throw new IllegalArgumentException("'retryDelayBase' should be >=1. Actual: " + retryDelayBase);
-        if (processingThreads <= 1) throw new IllegalArgumentException("'processingThreads' should be >=1. Actual: " + processingThreads);
+    public int getMaxTaskCount() {
+        return maxTaskCount;
+    }
+
+    public long getMaxTaskDataSize() {
+        return maxTaskDataSize;
+    }
+
+    public int getMaxRetryCount() {
+        return maxRetryCount;
+    }
+
+    public long getRetryDelayBase() {
+        return retryDelayBase;
+    }
+
+    public int getProcessingThreads() {
+        return processingThreads;
     }
 
     private static long defaultMaxDataSize() {

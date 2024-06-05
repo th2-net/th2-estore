@@ -59,8 +59,6 @@ public class EventStore {
             Configuration config = factory.getCustomConfiguration(Configuration.class);
             if (config == null) {
                 config = new Configuration();
-            } else {
-                config.validate();
             }
 
             LOGGER.info("Effective configuration:\n{}", config);

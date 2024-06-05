@@ -94,7 +94,7 @@ public class TestEventPersistor {
         cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE, STORE_ACTION_REJECTION_THRESHOLD));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
-        Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, MAX_EVENT_QUEUE_DATA_SIZE, TASK_PROCESSING_THREADS);
+        Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_QUEUE_DATA_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, TASK_PROCESSING_THREADS);
         persistor = spy(new EventPersistor(errorCollector, config, storageMock));
         persistor.start();
     }
