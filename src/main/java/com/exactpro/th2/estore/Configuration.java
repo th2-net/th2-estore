@@ -15,6 +15,8 @@
 
 package com.exactpro.th2.estore;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+
 public class Configuration {
     private static final int DEFAULT_MAX_TASK_RETRIES = 1000000;
     private static final int DEFAULT_MAX_TASK_COUNT = 256;
@@ -52,6 +54,7 @@ public class Configuration {
                 defaultMaxDataSize(), DEFAULT_PROCESSING_THREADS);
     }
 
+    @JsonCreator
     public Configuration(Integer maxTaskCount, Integer maxTaskRetries, Long taskRetryDelayBase,
                          Long maxTaskDataSize, Integer processingThreads) {
         this.maxTaskCount = maxTaskCount;
