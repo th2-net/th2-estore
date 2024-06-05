@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2022 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -19,11 +19,13 @@ public class Configuration {
     private static final int DEFAULT_MAX_TASK_RETRIES = 1000000;
     private static final int DEFAULT_MAX_TASK_COUNT = 256;
     private static final long DEFAULT_RETRY_DELAY_BASEM_S = 5000;
+    private static final int DEFAULT_PROCESSING_THREADS = Runtime.getRuntime().availableProcessors();
 
-    private Integer  maxTaskCount;
-    private Long     maxTaskDataSize;
-    private Integer  maxRetryCount;
-    private Long     retryDelayBase;
+    private Integer maxTaskCount;
+    private Long maxTaskDataSize;
+    private Integer maxRetryCount;
+    private Long retryDelayBase;
+    private Integer processingThreads;
 
     public Long getMaxTaskDataSize() {
         return maxTaskDataSize == null ? defaultMaxDataSize() : maxTaskDataSize;
@@ -41,20 +43,26 @@ public class Configuration {
         return retryDelayBase == null ? DEFAULT_RETRY_DELAY_BASEM_S : retryDelayBase;
     }
 
-    public Configuration() {
-        this(DEFAULT_MAX_TASK_COUNT, DEFAULT_MAX_TASK_RETRIES, DEFAULT_RETRY_DELAY_BASEM_S, defaultMaxDataSize());
+    public int getProcessingThreads() {
+        return processingThreads == null ? DEFAULT_PROCESSING_THREADS : processingThreads;
     }
 
-    public Configuration(Integer maxTaskCount, Integer maxTaskRetries, Long taskRetryDelayBase, Long maxTaskDataSize) {
+    public Configuration() {
+        this(DEFAULT_MAX_TASK_COUNT, DEFAULT_MAX_TASK_RETRIES, DEFAULT_RETRY_DELAY_BASEM_S,
+                defaultMaxDataSize(), DEFAULT_PROCESSING_THREADS);
+    }
+
+    public Configuration(Integer maxTaskCount, Integer maxTaskRetries, Long taskRetryDelayBase,
+                         Long maxTaskDataSize, Integer processingThreads) {
         this.maxTaskCount = maxTaskCount;
         this.maxRetryCount = maxTaskRetries;
         this.retryDelayBase = taskRetryDelayBase;
         this.maxTaskDataSize = maxTaskDataSize;
-
+        this.processingThreads = processingThreads;
     }
 
     private static long defaultMaxDataSize() {
-        return Runtime.getRuntime().totalMemory()  / 2;
+        return Runtime.getRuntime().totalMemory() / 2;
     }
 
     @Override

@@ -24,15 +24,15 @@ kind: Th2Estore
 metadata:
   name: estore
 spec:
-  image-name: ghcr.io/th2-net/th2-estore
-  image-version: <image version>
+  imageName: ghcr.io/th2-net/th2-estore
+  imageVersion: <image version>
   customConfig:
-    maxTaskCount : 128
-    maxTaskDataSize : 536870912
-    maxRetryCount : 3
+    maxTaskCount: 128
+    maxTaskDataSize: 536870912
+    maxRetryCount: 3
   mqRouter:
     prefetchCount: 100
-  extended-settings:
+  extendedSettings:
     envVariables:
       JAVA_TOOL_OPTIONS: >
         -XX:+ExitOnOutOfMemoryError
@@ -60,10 +60,11 @@ Configuration is provided as `custom.json` file
 
 ```json
 {
-    "maxTaskCount" : 256,
-    "maxTaskDataSize" : 133169152,
-    "maxRetryCount" : 1000000,
-    "retryDelayBase" : 5000
+    "maxTaskCount": 256,
+    "maxTaskDataSize": 133169152,
+    "maxRetryCount": 1000000,
+    "retryDelayBase": 5000,
+    "processingThreads": 4
 }
 ```
 
@@ -73,6 +74,7 @@ Configuration is provided as `custom.json` file
 + _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure (default: 1000000)
 + _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
++ _processingThreads_ - number of task processing threads (default: number available logical cpu cores)
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
@@ -87,9 +89,10 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Performance
 
-The component provides a performance of 100K events per second if the events are packaged in batches of 20 or more events.
+The component provides a performance of 100K events per second if the events are packaged in batches of 20 or
+more events(event size: 1.4KB, event status: SUCCEED, attached messages: 1).
 
-Processing speed (K events/sec) vs batch size for estore:
+Processing speed (K events/sec) vs batch size for estore (under load of 100K events/s):
 
 ![performance chart](./perf_chart.png)
 
