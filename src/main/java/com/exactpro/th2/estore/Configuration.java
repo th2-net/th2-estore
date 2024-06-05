@@ -59,6 +59,15 @@ public class Configuration {
         this.retryDelayBase = taskRetryDelayBase;
         this.maxTaskDataSize = maxTaskDataSize;
         this.processingThreads = processingThreads;
+        validate();
+    }
+
+    public void validate() {
+        if (maxTaskCount <= 1) throw new IllegalArgumentException("'maxTaskCount' should be >=1. Actual: " + maxTaskCount);
+        if (maxTaskDataSize <= 1) throw new IllegalArgumentException("'maxTaskDataSize' should be >=1. Actual: " + maxTaskDataSize);
+        if (maxRetryCount <= 0) throw new IllegalArgumentException("'maxRetryCount' should be >=0. Actual: " + maxRetryCount);
+        if (retryDelayBase <= 1) throw new IllegalArgumentException("'retryDelayBase' should be >=1. Actual: " + retryDelayBase);
+        if (processingThreads <= 1) throw new IllegalArgumentException("'processingThreads' should be >=1. Actual: " + processingThreads);
     }
 
     private static long defaultMaxDataSize() {
@@ -71,11 +80,12 @@ public class Configuration {
         String SUFFIX = ",\n";
         String SUFFIX_LAST = "\n";
         String SEP = "\" : ";
-        return new StringBuilder("{\n")
-                .append(PREFIX).append("maxTaskCount").append(SEP).append(getMaxTaskCount()).append(SUFFIX)
-                .append(PREFIX).append("maxTaskDataSize").append(SEP).append(getMaxTaskDataSize()).append(SUFFIX)
-                .append(PREFIX).append("maxRetryCount").append(SEP).append(getMaxRetryCount()).append(SUFFIX)
-                .append(PREFIX).append("retryDelayBase").append(SEP).append(getRetryDelayBase()).append(SUFFIX_LAST)
-                .append("}").toString();
+        return "{\n" +
+                PREFIX + "maxTaskCount" + SEP + getMaxTaskCount() + SUFFIX +
+                PREFIX + "maxTaskDataSize" + SEP + getMaxTaskDataSize() + SUFFIX +
+                PREFIX + "maxRetryCount" + SEP + getMaxRetryCount() + SUFFIX +
+                PREFIX + "retryDelayBase" + SEP + getRetryDelayBase() + SUFFIX +
+                PREFIX + "processingThreads" + SEP + getProcessingThreads() + SUFFIX_LAST +
+                "}";
     }
 }
