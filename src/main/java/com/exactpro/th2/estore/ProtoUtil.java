@@ -24,6 +24,7 @@ import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
 import com.exactpro.th2.common.util.StorageUtils;
+import com.google.common.base.Strings;
 import com.google.protobuf.Timestamp;
 
 import java.util.Collection;
@@ -45,11 +46,16 @@ public class ProtoUtil {
     }
 
     public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID) {
+        String id = protoEventID.getId();
+        if (Strings.isNullOrEmpty(id)) {
+            throw new IllegalArgumentException("No unique identifier specified for event: " + protoEventID);
+        }
+
         return new StoredTestEventId(
                 new BookId(protoEventID.getBookName()),
                 protoEventID.getScope(),
                 StorageUtils.toInstant(protoEventID.getStartTimestamp()),
-                String.valueOf(protoEventID.getId())
+                id
         );
     }
 
