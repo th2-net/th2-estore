@@ -90,7 +90,7 @@ Please see more details about this feature via [link](https://github.com/th2-net
 # Performance
 
 The component provides a performance of 100K events per second if the events are packaged in batches of 20 or
-more events(event size: 1.4KB, event status: SUCCEED, attached messages: 1).
+more events(event size: 1.4KB, event status: SUCCEED, no attached messages).
 
 Processing speed (K events/sec) vs batch size for estore (under load of 100K events/s):
 

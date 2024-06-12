@@ -101,9 +101,9 @@ spec:
 ```
 
 ## Test parameters
-| woodpeckers (n) | batch size (events) | event size (KB) | load duration (min) | page duration (days) |
-|-----------------|---------------------|-----------------|---------------------|----------------------|
-| 2               | 700                 | 1.37            | 40                  | 1                    |
+| woodpeckers (n) | batch size (events) | event size (KB) | attached messages (n) | load duration (min) | page duration (days) |
+|-----------------|---------------------|-----------------|-----------------------|---------------------|----------------------|
+| 2               | 700                 | 1.37            | 1                     | 40                  | 1                    |
 
 | component  | rate (event/sec) | rate (MB/sec) | Total data size (GB) | Total events (n) |
 |------------|------------------|---------------|----------------------|------------------|
