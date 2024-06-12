@@ -23,11 +23,10 @@ import com.exactpro.th2.common.grpc.Event;
 import com.exactpro.th2.common.grpc.EventIDOrBuilder;
 import com.exactpro.th2.common.grpc.EventStatus;
 import com.exactpro.th2.common.grpc.MessageIDOrBuilder;
+import com.exactpro.th2.common.message.MessageUtils;
 import com.exactpro.th2.common.util.StorageUtils;
 import com.google.common.base.Strings;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Timestamp;
-import com.google.protobuf.util.JsonFormat;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -50,14 +49,7 @@ public class ProtoUtil {
     public static StoredTestEventId toCradleEventID(EventIDOrBuilder protoEventID) {
         String id = protoEventID.getId();
         if (Strings.isNullOrEmpty(id)) {
-            String eventString;
-            try {
-                eventString = JsonFormat.printer().print(protoEventID);
-            } catch (InvalidProtocolBufferException e) {
-                eventString = protoEventID.toString();
-            }
-
-            throw new IllegalArgumentException("No unique identifier specified for event: " + eventString);
+            throw new IllegalArgumentException("No unique identifier specified for event: " + MessageUtils.toJson(protoEventID));
         }
 
         return new StoredTestEventId(
