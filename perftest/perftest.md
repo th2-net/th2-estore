@@ -84,13 +84,6 @@ spec:
         -XX:MaxDirectMemorySize=50M
         -Ddatastax-java-driver.advanced.connection.init-query-timeout="5000 milliseconds"
         -Ddatastax-java-driver.basic.request.timeout="3 seconds"
-        -Dcom.sun.management.jmxremote
-        -Dcom.sun.management.jmxremote.port=1099
-        -Dcom.sun.management.jmxremote.rmi.port=1099
-        -Dcom.sun.management.jmxremote.ssl=false
-        -Dcom.sun.management.jmxremote.authenticate=false
-        -Dcom.sun.management.jmxremote.local.only=false
-        -Djava.rmi.server.hostname=127.0.0.1
     resources:
       limits:
         cpu: 2500m
@@ -124,7 +117,7 @@ spec:
 | RAM         | 433 MB   | 1.93 GB    | 3.8 GB    |
 
 ## Computation resources th2-estore metrics
-![th2-estore resources](estore_res.png)
+![th2-estore resources](estore_res.png)\
 ![th2-estore heap usage](estore_heap.png)
 
 ## Computation resources RabbitMQ metrics
