@@ -135,6 +135,13 @@ public class EventProcessor implements AutoCloseable {
 
         try {
             TestEventBatchToStore cradleBatch = toCradleBatch(eventBatch);
+
+            for (var event: eventBatch.getEventsList()) {
+                if (event.getStatus() != EventStatus.SUCCESS) {
+                    LOGGER.error("Received event in batch with {} status. Event: {}", event.getStatus(), com.exactpro.th2.common.message.MessageUtils.toJson(event));
+                }
+            }
+
             persist(cradleBatch, new Callback<>() {
                 @Override
                 public void onSuccess(TestEventToStore data) {
