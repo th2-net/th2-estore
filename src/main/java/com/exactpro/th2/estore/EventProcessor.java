@@ -114,7 +114,7 @@ public class EventProcessor implements AutoCloseable {
             try {
 
                 if (event.getStatus() != EventStatus.SUCCESS) {
-                    LOGGER.error("Received event with {} status", event.getStatus());
+                    LOGGER.error("Received event with {} status. Event: {}", event.getStatus(), com.exactpro.th2.common.message.MessageUtils.toJson(event));
                 }
 
                 TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
