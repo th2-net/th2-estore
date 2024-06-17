@@ -22,10 +22,7 @@ import com.exactpro.cradle.testevents.TestEventSingleToStore;
 import com.exactpro.cradle.testevents.TestEventSingleToStoreBuilder;
 import com.exactpro.cradle.testevents.TestEventToStore;
 import com.exactpro.cradle.utils.CradleStorageException;
-import com.exactpro.th2.common.grpc.Event;
-import com.exactpro.th2.common.grpc.EventBatch;
-import com.exactpro.th2.common.grpc.EventBatchOrBuilder;
-import com.exactpro.th2.common.grpc.EventOrBuilder;
+import com.exactpro.th2.common.grpc.*;
 import com.exactpro.th2.common.schema.message.*;
 import com.exactpro.th2.common.schema.message.ManualAckDeliveryCallback.Confirmation;
 import com.exactpro.th2.common.util.StorageUtils;
@@ -115,6 +112,11 @@ public class EventProcessor implements AutoCloseable {
 
         events.forEach((event) -> {
             try {
+
+                if (event.getStatus() != EventStatus.SUCCESS) {
+                    LOGGER.error("Received event with {} status", event.getStatus());
+                }
+
                 TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
                 persist(cradleEventSingle, persistorCallback);
             } catch (Exception e) {
