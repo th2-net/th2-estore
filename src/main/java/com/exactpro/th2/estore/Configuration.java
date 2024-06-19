@@ -49,11 +49,11 @@ public class Configuration {
         this.retryDelayBase = retryDelayBase == null ? DEFAULT_RETRY_DELAY_BASEM_S : retryDelayBase;
         this.processingThreads = processingThreads == null ? DEFAULT_PROCESSING_THREADS : processingThreads;
 
-        if (this.maxTaskCount <= 1) throw new IllegalArgumentException("'maxTaskCount' should be >=1. Actual: " + maxTaskCount);
-        if (this.maxTaskDataSize <= 1) throw new IllegalArgumentException("'maxTaskDataSize' should be >=1. Actual: " + maxTaskDataSize);
-        if (this.maxRetryCount <= 0) throw new IllegalArgumentException("'maxRetryCount' should be >=0. Actual: " + maxRetryCount);
-        if (this.retryDelayBase <= 1) throw new IllegalArgumentException("'retryDelayBase' should be >=1. Actual: " + retryDelayBase);
-        if (this.processingThreads <= 1) throw new IllegalArgumentException("'processingThreads' should be >=1. Actual: " + processingThreads);
+        if (this.maxTaskCount < 1) throw new IllegalArgumentException("'maxTaskCount' should be >=1. Actual: " + maxTaskCount);
+        if (this.maxTaskDataSize < 1) throw new IllegalArgumentException("'maxTaskDataSize' should be >=1. Actual: " + maxTaskDataSize);
+        if (this.maxRetryCount < 0) throw new IllegalArgumentException("'maxRetryCount' should be >=0. Actual: " + maxRetryCount);
+        if (this.retryDelayBase < 1) throw new IllegalArgumentException("'retryDelayBase' should be >=1. Actual: " + retryDelayBase);
+        if (this.processingThreads < 1) throw new IllegalArgumentException("'processingThreads' should be >=1. Actual: " + processingThreads);
     }
 
     public int getMaxTaskCount() {

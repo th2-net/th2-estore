@@ -24,6 +24,7 @@ import com.exactpro.th2.taskutils.BlockingScheduledRetryableTaskQueue;
 import com.exactpro.th2.taskutils.FutureTracker;
 import com.exactpro.th2.taskutils.RetryScheduler;
 import com.exactpro.th2.taskutils.ScheduledRetryableTask;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.prometheus.client.Histogram;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
@@ -42,7 +44,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
-
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("event-persistor-%d").build();
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<PersistenceTask> taskQueue;
     private final FutureTracker<Void> futures;
@@ -70,7 +72,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
-        this.executor = Executors.newScheduledThreadPool(config.getProcessingThreads());
+        this.executor = Executors.newScheduledThreadPool(config.getProcessingThreads(), THREAD_FACTORY);
     }
 
     public void start() throws InterruptedException {
