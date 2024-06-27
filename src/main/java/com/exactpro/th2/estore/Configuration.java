@@ -20,9 +20,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class Configuration {
     private static final int DEFAULT_MAX_TASK_RETRIES = 1000000;
-    private static final int DEFAULT_MAX_TASK_COUNT = 256;
+    private static final int DEFAULT_MAX_TASK_COUNT = 128;
     private static final long DEFAULT_RETRY_DELAY_BASEM_S = 5000;
-    private static final int DEFAULT_PROCESSING_THREADS = Runtime.getRuntime().availableProcessors();
+    private static final int DEFAULT_PROCESSING_THREADS = 1;
 
     private final int maxTaskCount;
     private final long maxTaskDataSize;

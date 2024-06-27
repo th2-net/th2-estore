@@ -30,6 +30,7 @@ spec:
     maxTaskCount: 128
     maxTaskDataSize: 536870912
     maxRetryCount: 3
+    processingThreads: 1
   mqRouter:
     prefetchCount: 100
   extendedSettings:
@@ -60,21 +61,21 @@ Configuration is provided as `custom.json` file
 
 ```json
 {
-    "maxTaskCount": 256,
+    "maxTaskCount": 128,
     "maxTaskDataSize": 133169152,
     "maxRetryCount": 1000000,
     "retryDelayBase": 5000,
-    "processingThreads": 4
+    "processingThreads": 1
 }
 ```
 
 
-+ _maxTaskCount_ - maximum number of events that will be processed simultaneously (default: 256)
++ _maxTaskCount_ - maximum number of events that will be processed simultaneously (default: 128)
 + _maxTaskDataSize_ - maximum total data size of events during parallel processing (default: half of available memory)
 + _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure (default: 1000000)
 + _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
-+ _processingThreads_ - number of task processing threads (default: number available logical cpu cores)
++ _processingThreads_ - number of task processing threads (default: 1 thread)
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
@@ -106,6 +107,9 @@ More details [here](perftest/perftest.md).
 
 * Using separate executor instead of ForkJoinPool.commonPool() when storing events
 * Updated cradle api: `5.4.0-dev`
+* Corrected default configuration:
+  * maxTaskCount: `256` -> `128`
+* added `processingThreads` option 
 
 ## 5.6.0
 
