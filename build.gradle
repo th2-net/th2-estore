@@ -10,7 +10,7 @@ sourceCompatibility = 11
 targetCompatibility = 11
 
 ext {
-    cradleVersion = '5.4.1-improve-book-info-cache-9661797806-1bd3f6a-SNAPSHOT'
+    cradleVersion = '5.4.1-TH2-5207-9758119785-0fae4a0-SNAPSHOT'
 }
 
 repositories {
