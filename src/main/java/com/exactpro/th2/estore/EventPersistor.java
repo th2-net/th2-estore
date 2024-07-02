@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -44,8 +44,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EventPersistor.class);
     private static final String THREAD_NAME_PREFIX = "event-persistor-thread-";
-    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("persistor-service-%d").build();
-
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder().setNameFormat("event-persistor-%d").build();
     private final CradleStorage cradleStorage;
     private final BlockingScheduledRetryableTaskQueue<PersistenceTask> taskQueue;
     private final FutureTracker<Void> futures;
@@ -54,7 +53,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private final int maxTaskRetries;
 
     private final EventPersistorMetrics<PersistenceTask> metrics;
-    private final ScheduledExecutorService samplerService;
+    private final ScheduledExecutorService executor;
     private final ErrorCollector errorCollector;
 
     public EventPersistor(@NotNull ErrorCollector errorCollector,
@@ -73,9 +72,8 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
-        this.samplerService = Executors.newSingleThreadScheduledExecutor(THREAD_FACTORY);
+        this.executor = Executors.newScheduledThreadPool(config.getProcessingThreads(), THREAD_FACTORY);
     }
-
 
     public void start() throws InterruptedException {
         this.stopped = false;
@@ -86,7 +84,6 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         }
     }
 
-
     @Override
     public void run() {
         synchronized (signal) {
@@ -95,7 +92,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
         LOGGER.info("EventProcessor started. Maximum data size for tasks = {}, maximum number of tasks = {}",
                 taskQueue.getMaxDataSize(), taskQueue.getMaxTaskCount());
-        samplerService.scheduleWithFixedDelay(
+        executor.scheduleWithFixedDelay(
                 metrics::takeQueueMeasurements,
                 0,
                 1,
@@ -172,7 +169,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         } catch (Exception ex) {
             errorCollector.collect(LOGGER, "Cannot await all futures are finished", ex);
         }
-        shutdownGracefully(samplerService, 1, TimeUnit.MINUTES);
+        shutdownGracefully(executor, 1, TimeUnit.MINUTES);
     }
 
 
@@ -182,17 +179,18 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
         CompletableFuture<Void> result = cradleStorage.storeTestEventAsync(event)
                 .thenRun(() -> LOGGER.debug("Stored batch id '{}' parent id '{}'", event.getId(), event.getParentId()))
-                .whenCompleteAsync((unused, ex) ->
-                    {
-                        timer.observeDuration();
-                        if (ex != null) {
-                            resolveTaskError(task, ex);
-                        } else {
-                            taskQueue.complete(task);
-                            metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
-                            task.getPayload().complete();
-                        }
-                    }
+                .whenCompleteAsync(
+                        (unused, ex) -> {
+                            timer.observeDuration();
+                            if (ex != null) {
+                                resolveTaskError(task, ex);
+                            } else {
+                                taskQueue.complete(task);
+                                metrics.updateEventMeasurements(getEventCount(event), task.getPayloadSize());
+                                task.getPayload().complete();
+                            }
+                        },
+                        executor
                 );
 
         futures.track(result);

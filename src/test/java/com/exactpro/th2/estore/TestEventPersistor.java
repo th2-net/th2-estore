@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -74,6 +74,7 @@ public class TestEventPersistor {
     private static final int  MAX_EVENT_QUEUE_TASK_SIZE   = 8;
     private static final long MAX_EVENT_QUEUE_DATA_SIZE   = 10_000L;
     private static final long STORE_ACTION_REJECTION_THRESHOLD = 30_000L;
+    private static final int TASK_PROCESSING_THREADS = 4;
 
     private static final String BOOK_NAME = "test-book";
     private static final String SCOPE = "test-scope";
@@ -93,7 +94,7 @@ public class TestEventPersistor {
         cradleEntitiesFactory = spy(new CradleEntitiesFactory(MAX_MESSAGE_BATCH_SIZE, MAX_TEST_EVENT_BATCH_SIZE, STORE_ACTION_REJECTION_THRESHOLD));
         doReturn(CompletableFuture.completedFuture(null)).when(storageMock).storeTestEventAsync(any());
 
-        Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, MAX_EVENT_QUEUE_DATA_SIZE);
+        Configuration config = new Configuration(MAX_EVENT_QUEUE_TASK_SIZE, MAX_EVENT_QUEUE_DATA_SIZE, MAX_EVENT_PERSIST_RETRIES, 10L, TASK_PROCESSING_THREADS);
         persistor = spy(new EventPersistor(errorCollector, config, storageMock));
         persistor.start();
     }
