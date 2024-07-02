@@ -106,7 +106,7 @@ More details [here](perftest/perftest.md).
 ## 5.7.0
 
 * Using separate executor instead of ForkJoinPool.commonPool() when storing events
-* Updated cradle api: `5.4.0-dev`
+* Updated cradle api: `5.4.1-dev`
 * Corrected default configuration:
   * maxTaskCount: `256` -> `128`
 * added `processingThreads` option 
