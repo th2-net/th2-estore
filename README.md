@@ -90,16 +90,14 @@ Please see more details about this feature via [link](https://github.com/th2-net
 
 # Performance
 
-The component provides a performance of 100K events per second if the events are packaged in batches of 20 or
-more events(event size: 1.4KB, event status: SUCCEED, no attached messages).
+The component provides a performance of 100K events per second if the events are packaged in batches of 50 - 300 events
+where event body size is 1.1 KiB, status is SUCCEED and one message id attached.
 
 Processing speed (K events/sec) vs batch size for estore (under load of 100K events/s):
 
-![performance chart](./perf_chart.png)
-
 Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount value should be used (e.g. 1000) to achieve these results.
 
-More details [here](perftest/perftest.md).
+More details [here](doc/perftest-5.7.0-dev/perftest).
 
 # Changes
 
