@@ -1,4 +1,4 @@
-# Overview (5.6.0)
+# Overview (5.7.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -19,25 +19,40 @@ Infra schema can only contain one estore box description. It consists of one req
 
 General view of the component will look like this:
 ```yaml
-apiVersion: th2.exactpro.com/v1
+apiVersion: th2.exactpro.com/v2
 kind: Th2Estore
 metadata:
   name: estore
 spec:
-  image-name: ghcr.io/th2-net/th2-estore
-  image-version: <image version>
-  extended-settings:
-    service:
-      enabled: false
+  imageName: ghcr.io/th2-net/th2-estore
+  imageVersion: <image version>
+  customConfig:
+    maxTaskCount: 128
+    maxTaskDataSize: 536870912
+    maxRetryCount: 3
+    processingThreads: 1
+  mqRouter:
+    prefetchCount: 100
+  extendedSettings:
     envVariables:
-      JAVA_TOOL_OPTIONS: "-XX:+ExitOnOutOfMemoryError -Ddatastax-java-driver.advanced.connection.init-query-timeout=\"5000 milliseconds\""
+      JAVA_TOOL_OPTIONS: >
+        -XX:+ExitOnOutOfMemoryError
+        -XX:+UseContainerSupport
+        -Dlog4j2.shutdownHookEnabled=false
+        -XX:MaxRAMPercentage=84.2
+        -XX:MaxMetaspaceSize=70M
+        -XX:CompressedClassSpaceSize=10M
+        -XX:ReservedCodeCacheSize=40M
+        -XX:MaxDirectMemorySize=50M
+        -Ddatastax-java-driver.advanced.connection.init-query-timeout="5000 milliseconds"
+        -Ddatastax-java-driver.basic.request.timeout="3 seconds"
     resources:
       limits:
-        memory: 500Mi
-        cpu: 200m
+        memory: 2000Mi
+        cpu: 2500m
       requests:
         memory: 100Mi
-        cpu: 20m
+        cpu: 500m
 ```
 
 # Configuration
@@ -46,19 +61,21 @@ Configuration is provided as `custom.json` file
 
 ```json
 {
-    "maxTaskCount" : 256,
-    "maxTaskDataSize" : 133169152,
-    "maxRetryCount" : 1000000,
-    "retryDelayBase" : 5000
+    "maxTaskCount": 128,
+    "maxTaskDataSize": 133169152,
+    "maxRetryCount": 1000000,
+    "retryDelayBase": 5000,
+    "processingThreads": 1
 }
 ```
 
 
-+ _maxTaskCount_ - maximum number of events that will be processed simultaneously
-+ _maxTaskDataSize_ - maximum total data size of events during parallel processing
-+ _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure
-+ _retryDelayBase_ - constant that will be used to calculate next retry time(ms):
++ _maxTaskCount_ - maximum number of events that will be processed simultaneously (default: 128)
++ _maxTaskDataSize_ - maximum total data size of events during parallel processing (default: half of available memory)
++ _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure (default: 1000000)
++ _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
++ _processingThreads_ - number of task processing threads (default: 1 thread)
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
@@ -71,7 +88,26 @@ This is a list of supported features provided by libraries.
 _CradleMaxEventBatchSize_ - this option defines the maximum event batch size in bytes.
 Please see more details about this feature via [link](https://github.com/th2-net/th2-common-j#configuration-formats)
 
+# Performance
+
+The component provides a performance of 100K events per second if the events are packaged in batches of 50 - 300 events
+where event body size is 1.1 KiB, status is SUCCEED and one message id attached.
+
+Processing speed (K events/sec) vs batch size for estore (under load of 100K events/s):
+
+Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount value should be used (e.g. 1000) to achieve these results.
+
+More details [here](doc/perftest-5.7.0-dev/perftest).
+
 # Changes
+
+## 5.7.0
+
+* Using separate executor instead of ForkJoinPool.commonPool() when storing events
+* Updated cradle api: `5.4.1-dev`
+* Corrected default configuration:
+  * maxTaskCount: `256` -> `128`
+* added `processingThreads` option 
 
 ## 5.6.0
 
