@@ -97,7 +97,7 @@ Processing speed (K events/sec) vs batch size for estore (under load of 100K eve
 
 Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount value should be used (e.g. 1000) to achieve these results.
 
-More details [here](doc/perftest-5.7.0-dev/perftest).
+More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 # Changes
 
