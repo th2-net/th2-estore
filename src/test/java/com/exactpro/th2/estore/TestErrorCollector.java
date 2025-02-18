@@ -77,7 +77,7 @@ class TestErrorCollector {
     @BeforeEach
     void beforeEach() {
         doReturn(future).when(executor).scheduleAtFixedRate(any(Runnable.class), anyLong(), anyLong(), any(TimeUnit.class));
-        errorCollector = new ErrorCollector(executor, entitiesFactory, PERIOD, TIME_UNIT);
+        errorCollector = new CradleErrorCollector(executor, entitiesFactory, PERIOD, TIME_UNIT);
         errorCollector.init(persistor, rootEvent);
         verify(executor).scheduleAtFixedRate(taskCaptor.capture(), eq(PERIOD), eq(PERIOD), eq(TIME_UNIT));
         verifyNoMoreInteractions(executor);
