@@ -71,7 +71,7 @@ public class EventStore {
 
             CradleStorage storage = cradleManager.getStorage();
 
-            ErrorCollector errorCollector = new ErrorCollector(executor, storage.getEntitiesFactory());
+            ErrorCollector errorCollector = new CradleErrorCollector(executor, storage.getEntitiesFactory());
             resources.add(errorCollector);
 
             EventPersistor persistor = new EventPersistor(errorCollector, config, storage);
