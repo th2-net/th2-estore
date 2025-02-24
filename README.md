@@ -1,4 +1,4 @@
-# Overview (5.8.1)
+# Overview (5.9.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -104,10 +104,14 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 # Changes
 
-## 5.8.1
+## 5.9.0
 
 * Publish estore as moven artifact
 * added `persisotrTerminationTimeout` option
+* Updated
+  * th2 gradle plugin `0.2.1` based on bom: `4.10.0`
+    * Added suppressions:
+      * CVE-2025-25193, CVE-2025-24970 - These vulnerabilities does not affect us because this component don’t use netty.
 
 ## 5.8.0
 
