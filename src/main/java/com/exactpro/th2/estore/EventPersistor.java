@@ -52,6 +52,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private volatile boolean stopped;
     private final Object signal = new Object();
     private final int maxTaskRetries;
+    private final long persisotrTerminationTimeout;
 
     private final EventPersistorMetrics<PersistenceTask> metrics;
     private final ScheduledExecutorService executor;
@@ -70,6 +71,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                           RetryScheduler scheduler) {
         this.errorCollector = requireNonNull(errorCollector, "Error collector can't be null");
         this.maxTaskRetries = config.getMaxRetryCount();
+        this.persisotrTerminationTimeout = config.getPersisotrTerminationTimeout();
         this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
@@ -177,7 +179,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
             Thread thread = persistor.get();
             if (thread != null && thread.isAlive()) {
                 thread.interrupt();
-                thread.join(5000);
+                thread.join(persisotrTerminationTimeout);
                 if (thread.isAlive()) {
                     LOGGER.warn("Persistor thread hasn't stopped");
                 } else {

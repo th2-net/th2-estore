@@ -31,6 +31,7 @@ spec:
     maxTaskDataSize: 536870912
     maxRetryCount: 3
     processingThreads: 1
+    persisotrTerminationTimeout: 5000
   mqRouter:
     prefetchCount: 100
   extendedSettings:
@@ -65,7 +66,8 @@ Configuration is provided as `custom.json` file
     "maxTaskDataSize": 133169152,
     "maxRetryCount": 1000000,
     "retryDelayBase": 5000,
-    "processingThreads": 1
+    "processingThreads": 1,
+    "persisotrTerminationTimeout": 5000
 }
 ```
 
@@ -76,6 +78,7 @@ Configuration is provided as `custom.json` file
 + _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
 + _processingThreads_ - number of task processing threads (default: 1 thread)
++ _persisotrTerminationTimeout_ - the timeout in milliseconds to await for the persisotr thread complete (default: 5000)
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
@@ -104,6 +107,7 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 ## 5.8.1
 
 * Publish estore as moven artifact
+* added `persisotrTerminationTimeout` option
 
 ## 5.8.0
 
