@@ -107,11 +107,11 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 ## 5.9.0
 
 * Publish estore as moven artifact
-* added `persisotrTerminationTimeout` option
+* Prepared EventPersistor class for using in other project.
+* Added `persisotrTerminationTimeout` option
 * Updated
-  * th2 gradle plugin `0.2.1` based on bom: `4.10.0`
-    * Added suppressions:
-      * CVE-2025-25193, CVE-2025-24970 - These vulnerabilities does not affect us because this component don’t use netty.
+  * th2 gradle plugin `0.2.3` based on bom: `4.11.0`
+  * task-utils: `0.1.3`
 
 ## 5.8.0
 
