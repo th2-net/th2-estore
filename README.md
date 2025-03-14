@@ -110,7 +110,7 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 * Prepared EventPersistor class for using in other project.
 * Added `persisotrTerminationTimeout` option
 * Updated
-  * th2 gradle plugin `0.2.3` based on bom: `4.11.0`
+  * th2 gradle plugin `0.2.4` based on bom: `4.11.0`
   * task-utils: `0.1.3`
 
 ## 5.8.0

@@ -1,16 +1,12 @@
 plugins {
     id "application"
     id "maven-publish"
-    id "com.exactpro.th2.gradle.publish" version "0.2.3"
-    id "com.exactpro.th2.gradle.component" version "0.2.3"
+    id "com.exactpro.th2.gradle.publish" version "0.2.4"
+    id "com.exactpro.th2.gradle.component" version "0.2.4"
 }
 
 group = 'com.exactpro.th2'
 version = release_version
-
-th2JavaRelease {
-    targetJavaVersion.set(JavaVersion.VERSION_11)
-}
 
 ext {
     cradleVersion = '5.4.4-dev'
@@ -18,10 +14,6 @@ ext {
 
 repositories {
     mavenCentral()
-    maven {
-        name 'Sonatype_snapshots'
-        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
-    }
     maven {
         name 'Sonatype_releases'
         url 'https://s01.oss.sonatype.org/content/repositories/releases/'

@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2023-2025 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,8 +52,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 @SuppressWarnings("DynamicRegexReplaceableByCompiledPattern")
 class TestErrorCollector {
 
-    private static final long PERIOD = RandomUtils.nextLong(0, Long.MAX_VALUE);
-    private static final TimeUnit TIME_UNIT = TimeUnit.values()[RandomUtils.nextInt(0, TimeUnit.values().length)] ;
+    private static final long PERIOD = RandomUtils.insecure().randomLong(0, Long.MAX_VALUE);
+    private static final TimeUnit TIME_UNIT = TimeUnit.values()[RandomUtils.insecure().randomInt(0, TimeUnit.values().length)] ;
 
     @Mock
     private Logger logger;
