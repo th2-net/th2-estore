@@ -1,10 +1,7 @@
-FROM gradle:8.11.1-jdk11 AS build
+FROM gradle:8.11.1-jdk21 AS build
 ARG release_version
-ARG vcs_url
 COPY ./ .
-RUN gradle --no-daemon clean build dockerPrepare \
-    -Prelease_version=${release_version} \
-    -Pvcs_url=${vcs_url}
+RUN gradle --no-daemon clean build dockerPrepare -Prelease_version=${release_version}
 
 FROM adoptopenjdk/openjdk11:alpine
 WORKDIR /home

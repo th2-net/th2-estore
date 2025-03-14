@@ -1,4 +1,4 @@
-# Overview (5.8.0)
+# Overview (5.9.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -31,6 +31,7 @@ spec:
     maxTaskDataSize: 536870912
     maxRetryCount: 3
     processingThreads: 1
+    persisotrTerminationTimeout: 5000
   mqRouter:
     prefetchCount: 100
   extendedSettings:
@@ -65,7 +66,8 @@ Configuration is provided as `custom.json` file
     "maxTaskDataSize": 133169152,
     "maxRetryCount": 1000000,
     "retryDelayBase": 5000,
-    "processingThreads": 1
+    "processingThreads": 1,
+    "persisotrTerminationTimeout": 5000
 }
 ```
 
@@ -76,6 +78,7 @@ Configuration is provided as `custom.json` file
 + _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
 + _processingThreads_ - number of task processing threads (default: 1 thread)
++ _persisotrTerminationTimeout_ - the timeout in milliseconds to await for the persisotr thread complete (default: 5000)
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
@@ -100,6 +103,15 @@ Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount v
 More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 # Changes
+
+## 5.9.0
+
+* Publish estore as moven artifact
+* Prepared EventPersistor class for using in other project.
+* Added `persisotrTerminationTimeout` option
+* Updated
+  * th2 gradle plugin `0.2.4` based on bom: `4.11.0`
+  * task-utils: `0.1.3`
 
 ## 5.8.0
 

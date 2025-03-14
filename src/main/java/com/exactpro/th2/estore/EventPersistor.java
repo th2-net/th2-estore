@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2024 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -36,6 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
 import static java.util.Objects.requireNonNull;
@@ -51,10 +52,12 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     private volatile boolean stopped;
     private final Object signal = new Object();
     private final int maxTaskRetries;
+    private final long persisotrTerminationTimeout;
 
     private final EventPersistorMetrics<PersistenceTask> metrics;
     private final ScheduledExecutorService executor;
     private final ErrorCollector errorCollector;
+    private final AtomicReference<Thread> persistor = new AtomicReference<>();
 
     public EventPersistor(@NotNull ErrorCollector errorCollector,
                           @NotNull Configuration config,
@@ -68,6 +71,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                           RetryScheduler scheduler) {
         this.errorCollector = requireNonNull(errorCollector, "Error collector can't be null");
         this.maxTaskRetries = config.getMaxRetryCount();
+        this.persisotrTerminationTimeout = config.getPersisotrTerminationTimeout();
         this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
         this.futures = new FutureTracker<>();
@@ -76,10 +80,16 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     }
 
     public void start() throws InterruptedException {
+        if (persistor.get() != null) {
+            throw new IllegalStateException("Event persistor has been already started once");
+        }
         this.stopped = false;
         synchronized (signal) {
-            // FIXME: control resource
-            new Thread(this, THREAD_NAME_PREFIX + this.hashCode()).start();
+            Thread thread = new Thread(this, THREAD_NAME_PREFIX + this.hashCode());
+            if (!persistor.compareAndSet(null, thread)) {
+                throw new IllegalStateException("Event persistor is already started");
+            }
+            thread.start();
             signal.wait();
         }
     }
@@ -160,12 +170,22 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
 
     public void close () {
-
         LOGGER.info("Waiting for futures completion");
         try {
             stopped = true;
             futures.awaitRemaining();
             LOGGER.info("All waiting futures are completed");
+
+            Thread thread = persistor.get();
+            if (thread != null && thread.isAlive()) {
+                thread.interrupt();
+                thread.join(persisotrTerminationTimeout);
+                if (thread.isAlive()) {
+                    LOGGER.warn("Persistor thread hasn't stopped");
+                } else {
+                    LOGGER.info("Persistor thread has stopped");
+                }
+            }
         } catch (Exception ex) {
             errorCollector.collect(LOGGER, "Cannot await all futures are finished", ex);
         }
