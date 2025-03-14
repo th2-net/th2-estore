@@ -61,7 +61,7 @@ public class CradleErrorCollector implements ErrorCollector {
     private volatile Persistor<TestEventToStore> persistor = DYMMY_PERSISTOR;
     private Map<String, ErrorMetadata> errors = new HashMap<>();
 
-    public CradleErrorCollector(@NotNull ScheduledExecutorService executor,
+    private CradleErrorCollector(@NotNull ScheduledExecutorService executor,
                                 @NotNull CradleEntitiesFactory entitiesFactory,
                                 long period,
                                 @NotNull TimeUnit unit) {
@@ -71,9 +71,21 @@ public class CradleErrorCollector implements ErrorCollector {
                 .scheduleAtFixedRate(this::drain, period, period, unit);
     }
 
-    public CradleErrorCollector(@NotNull ScheduledExecutorService executor,
+    private CradleErrorCollector(@NotNull ScheduledExecutorService executor,
                                 @NotNull CradleEntitiesFactory entitiesFactory) {
         this(executor, entitiesFactory, 1, TimeUnit.MINUTES);
+    }
+
+    public static ErrorCollector create(@NotNull ScheduledExecutorService executor,
+                                              @NotNull CradleEntitiesFactory entitiesFactory,
+                                              long period,
+                                              @NotNull TimeUnit unit) {
+        return new CradleErrorCollector(executor, entitiesFactory, period, unit);
+    }
+
+    public static ErrorCollector create(@NotNull ScheduledExecutorService executor,
+                                        @NotNull CradleEntitiesFactory entitiesFactory) {
+        return create(executor, entitiesFactory, 1, TimeUnit.MINUTES);
     }
 
     public void init(@NotNull Persistor<TestEventToStore> persistor, StoredTestEventId rootEvent) {
