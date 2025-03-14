@@ -50,11 +50,11 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.exactpro.th2.common.utils.ExecutorServiceUtilsKt.shutdownGracefully;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.doReturn;
@@ -206,7 +206,7 @@ public class TestEventPersistor {
 
     @Test
     @DisplayName("Event persistence is queued by count")
-    public void testEventCountQueueing() throws IOException, CradleStorageException {
+    public void testEventCountQueueing() throws IOException, CradleStorageException, InterruptedException {
 
         final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
         final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 5;
@@ -236,13 +236,14 @@ public class TestEventPersistor {
         verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
         verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
-        shutdownGracefully(executor, 1, TimeUnit.SECONDS);
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(1, TimeUnit.SECONDS), "Executor didn't terminate according to a timeout");
     }
 
 
     @Test
     @DisplayName("Event persistence is queued by event sizes")
-    public void testEventSizeQueueing() throws IOException, CradleStorageException {
+    public void testEventSizeQueueing() throws IOException, CradleStorageException, InterruptedException {
 
         final long storeExecutionTime = EVENT_PERSIST_TIMEOUT * 3;
         final long totalExecutionTime = EVENT_PERSIST_TIMEOUT * 6;
@@ -283,7 +284,8 @@ public class TestEventPersistor {
         verify(callback, after(totalExecutionTime).times(totalEvents)).onSuccess(any());
         verify(callback, after(totalExecutionTime).times(0)).onFail(any());
 
-        shutdownGracefully(executor, 1, TimeUnit.SECONDS);
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(1, TimeUnit.SECONDS), "Executor didn't terminate according to a timeout");
     }
 
 
