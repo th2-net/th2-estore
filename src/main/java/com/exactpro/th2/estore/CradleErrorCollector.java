@@ -71,11 +71,6 @@ public class CradleErrorCollector implements ErrorCollector {
                 .scheduleAtFixedRate(this::drain, period, period, unit);
     }
 
-    private CradleErrorCollector(@NotNull ScheduledExecutorService executor,
-                                @NotNull CradleEntitiesFactory entitiesFactory) {
-        this(executor, entitiesFactory, 1, TimeUnit.MINUTES);
-    }
-
     public static ErrorCollector create(@NotNull ScheduledExecutorService executor,
                                               @NotNull CradleEntitiesFactory entitiesFactory,
                                               long period,
