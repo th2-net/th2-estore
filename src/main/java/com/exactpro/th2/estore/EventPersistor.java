@@ -74,7 +74,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
         this.persisotrTerminationTimeout = config.getPersisotrTerminationTimeout();
         this.cradleStorage = requireNonNull(cradleStorage, "Cradle storage can't be null");
         this.taskQueue = new BlockingScheduledRetryableTaskQueue<>(config.getMaxTaskCount(), config.getMaxTaskDataSize(), scheduler);
-        this.futures = new FutureTracker<>();
+        this.futures = FutureTracker.createUnlimited();
         this.metrics = new EventPersistorMetrics<>(taskQueue);
         this.executor = Executors.newScheduledThreadPool(config.getProcessingThreads(), THREAD_FACTORY);
     }
@@ -117,7 +117,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                         resolveTaskError(task, e);
                     }
             } catch (InterruptedException ie) {
-                LOGGER.debug("Received InterruptedException. aborting");
+                LOGGER.debug("Received InterruptedException. aborting", ie);
                 break;
             }
         }
@@ -193,7 +193,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
     }
 
 
-    void processTask(ScheduledRetryableTask<PersistenceTask> task) throws IOException, CradleStorageException {
+    void processTask(ScheduledRetryableTask<PersistenceTask> task) throws IOException, CradleStorageException, InterruptedException {
 
         final TestEventToStore event = task.getPayload().eventBatch;
         final Histogram.Timer timer = metrics.startMeasuringPersistenceLatency();
@@ -213,7 +213,9 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
                         executor
                 );
 
-        futures.track(result);
+        if(!futures.track(result)) {
+            LOGGER.warn("Store test even future isn't tracked");
+        }
     }
 
 
