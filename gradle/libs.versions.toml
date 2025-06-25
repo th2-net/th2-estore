@@ -1,6 +1,6 @@
 [versions]
 th2-plugin = "0.2.4"
-cradle = "5.6.0-310-delayed-parent-event-status-update-if-parent-hasnt-been-stored-on-child-event-storing-15856442661-2297f10-SNAPSHOT"
+cradle = "5.6.0-310-delayed-parent-event-status-update-if-parent-hasnt-been-stored-on-child-event-storing-15869628520-dfbb703-SNAPSHOT"
 
 [libraries]
 th2-common-utils = { group = "com.exactpro.th2", name = "common-utils", version = "2.3.1-dev" }
