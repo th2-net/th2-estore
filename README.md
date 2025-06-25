@@ -106,8 +106,10 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 ## 5.10.0
 
-* Provided ability to update parent event status before storing child event.
-  Please read more details in [cradelapi release notes](https://github.com/th2-net/cradleapi?tab=readme-ov-file#560)
+* Provided ability to update parent event status before storing child event.<br>
+  Please read more details in [cradelapi release notes:5.6.0](https://github.com/th2-net/cradleapi?tab=readme-ov-file#560)
+* Delayed parent event status update if parent hasn't been stored on child event storing Added.<br>
+  Please read more details in [cradelapi release notes:5.6.0](https://github.com/th2-net/cradleapi?tab=readme-ov-file#560)
 * Updated:
   * common: `5.15.0-dev`
   * task-utils: `0.1.4`
