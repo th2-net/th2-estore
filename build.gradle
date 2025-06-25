@@ -14,10 +14,6 @@ repositories {
         name 'Sonatype_releases'
         url 'https://s01.oss.sonatype.org/content/repositories/releases/'
     }
-    maven {
-        name 'Sonatype_snapshots'
-        url 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
-    }
     mavenLocal()
 
     configurations.configureEach {
