@@ -1,4 +1,4 @@
-# Overview (5.9.0)
+# Overview (5.10.0)
 
 Event store (estore) is an important th2 component responsible for storing events into Cradle. Please refer to [Cradle repository] (https://github.com/th2-net/cradleapi/blob/master/README.md) for more details. This component has a pin for listening events via MQ.
 
@@ -103,6 +103,17 @@ Note: for smaller batches (less than 100 events) higher mqRouter.prefetchCount v
 More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 # Changes
+
+## 5.10.0
+
+* Provided ability to update parent event status before storing child event.<br>
+  Please read more details in [cradelapi release notes:5.6.0](https://github.com/th2-net/cradleapi?tab=readme-ov-file#560)
+* Delayed parent event status update if parent hasn't been stored on child event storing Added.<br>
+  Please read more details in [cradelapi release notes:5.6.0](https://github.com/th2-net/cradleapi?tab=readme-ov-file#560)
+* Updated:
+  * common: `5.15.0-dev`
+  * task-utils: `0.1.4`
+  * cradle api: `5.6.0-dev`
 
 ## 5.9.0
 
