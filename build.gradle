@@ -59,6 +59,48 @@ dependencies {
     }
 }
 
+dependencies { // Vulnerability fixes of transitive dependencies
+    implementation(platform(libs.netty.bom)) {
+        because("CVE-2026-45674, CVE-2026-47691, CVE-2026-56820, CVE-2026-75595 and other vulnerabilities fixed in 4.2.17.Final+")
+    }
+    implementation(platform(libs.jackson.bom)) {
+        because("CVE-2026-54512, CVE-2026-54513, CVE-2026-54515, CVE-2026-77310 and other vulnerabilities fixed in 2.21.5+")
+    }
+    implementation(platform(libs.kotlin.bom)) {
+        because("CVE-2026-53914 fixed in 2.4.20+, CVE-2020-29582 fixed in 2.1.0+")
+    }
+    implementation(platform(libs.log4j.bom)) {
+        because("CVE-2026-34477, CVE-2026-34478, CVE-2026-34479, CVE-2026-34480, CVE-2026-49844 fixed in 2.25.5+")
+    }
+    implementation(platform(libs.asm.bom)) {
+        because("CVE-2026-110270, CVE-2026-110262, CVE-2026-110591 fixed in 9.11+")
+    }
+
+    constraints {
+        implementation(libs.amqp.client) {
+            because("CVE-2026-69220, CVE-2026-63337, CVE-2026-106121, CVE-2026-106122 and other vulnerabilities fixed in 5.33.1+")
+        }
+        implementation(libs.guava) {
+            because("CVE-2026-102554 fixed in 33.7.2-jre+")
+        }
+        implementation(libs.lz4.java) {
+            because("CVE-2026-106451, CVE-2026-106450, CVE-2026-106452, CVE-2026-106453, CVE-2026-59949 fixed in 1.11.4+")
+        }
+        implementation(libs.vertx.core) {
+            because("CVE-2026-15075, CVE-2026-15076, CVE-2026-6860 fixed in 4.5.30+")
+        }
+        implementation(libs.vertx.auth.common) {
+            because("CVE-2026-15075, CVE-2026-15076, CVE-2026-6860 fixed in 4.5.30+")
+        }
+        implementation(libs.vertx.web.client) {
+            because("CVE-2026-15076 fixed in 4.5.30+")
+        }
+        implementation(libs.vertx.web.common) {
+            because("vertx modules should have the same version")
+        }
+    }
+}
+
 application {
     mainClassName 'com.exactpro.th2.estore.EventStore'
 }
