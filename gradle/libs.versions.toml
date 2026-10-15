@@ -1,6 +1,7 @@
 [versions]
 th2-plugin = "0.3.14"
 cradle = "5.7.1-dev"
+vertx = "4.5.35"
 
 [libraries]
 th2-common-utils = { group = "com.exactpro.th2", name = "common-utils", version = "2.4.0-dev" }
@@ -12,6 +13,20 @@ cradle-cassandra = { group = "com.exactpro.th2", name = "cradle-cassandra", vers
 
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "5.14.3" }
 mockito-junit-jupiter = { group = "org.mockito", name = "mockito-junit-jupiter", version = "5.21.0" }
+
+# Vulnerability fixes of transitive dependencies
+netty-bom = { group = "io.netty", name = "netty-bom", version = "4.2.19.Final" }
+jackson-bom = { group = "com.fasterxml.jackson", name = "jackson-bom", version = "2.21.7" }
+kotlin-bom = { group = "org.jetbrains.kotlin", name = "kotlin-bom", version = "2.4.21" }
+log4j-bom = { group = "org.apache.logging.log4j", name = "log4j-bom", version = "2.25.5" }
+asm-bom = { group = "org.ow2.asm", name = "asm-bom", version = "9.11" }
+amqp-client = { group = "com.rabbitmq", name = "amqp-client", version = "5.37.0" }
+guava = { group = "com.google.guava", name = "guava", version = "33.7.2-jre" }
+lz4-java = { group = "at.yawk.lz4", name = "lz4-java", version = "1.11.4" }
+vertx-core = { group = "io.vertx", name = "vertx-core", version.ref = "vertx" }
+vertx-auth-common = { group = "io.vertx", name = "vertx-auth-common", version.ref = "vertx" }
+vertx-web-client = { group = "io.vertx", name = "vertx-web-client", version.ref = "vertx" }
+vertx-web-common = { group = "io.vertx", name = "vertx-web-common", version.ref = "vertx" }
 
 [plugins]
 th2-publish = { id = "com.exactpro.th2.gradle.publish", version.ref = "th2-plugin" }
