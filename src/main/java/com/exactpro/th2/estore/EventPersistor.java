@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2026 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -143,7 +143,7 @@ public class EventPersistor implements Runnable, Persistor<TestEventToStore>, Au
 
 
     @Override
-    public void persist(TestEventToStore event, Callback<TestEventToStore> callback) {
+    public void persist(TestEventToStore event, Callback<TestEventToStore> callback) throws InterruptedException {
         metrics.takeQueueMeasurements();
         PersistenceTask task = new PersistenceTask(event, callback);
         taskQueue.submit(new ScheduledRetryableTask<>(System.nanoTime(), maxTaskRetries, getEventContentSize(event), task));

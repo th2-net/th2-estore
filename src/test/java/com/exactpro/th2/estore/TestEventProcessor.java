@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2026 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -51,7 +51,10 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -247,6 +250,56 @@ public class TestEventProcessor {
         capturedCallbacks.get(1).onFail(capturedEvents.get(1));
         verify(confirmation, times(1)).reject();
         verify(confirmation, times(0)).confirm();
+    }
+
+
+    @Test
+    @DisplayName("interruption stops storing single events and leaves delivery unacknowledged")
+    public void testSingleEventsInterruption() throws Exception {
+        String book = "test-book";
+        String scope = "test-scope";
+        doNothing()
+                .doThrow(new InterruptedException("test"))
+                .when(persistorMock).persist(any(), any());
+
+        Event first = start().name("sub-event-first").toProto(book, scope);
+        Event second = start().name("sub-event-second").toProto(book, scope);
+        Event third = start().name("sub-event-third").toProto(book, scope);
+        eventStore.process(deliveryOf(first, second, third), confirmation);
+
+        // Thread.interrupted() clears the status to not affect other tests
+        assertTrue(Thread.interrupted(), "Thread interrupted status");
+
+        ArgumentCaptor<TestEventSingleToStore> eventCapture = ArgumentCaptor.forClass(TestEventSingleToStore.class);
+        ArgumentCaptor<Callback<TestEventToStore>> callbackCapture = ArgumentCaptor.forClass(Callback.class);
+        verify(persistorMock, times(2)).persist(eventCapture.capture(), callbackCapture.capture());
+        assertStoredEvent(first, eventCapture.getAllValues().get(0));
+        assertStoredEvent(second, eventCapture.getAllValues().get(1));
+
+        // the event submitted before interruption doesn't respond to the delivery
+        Callback<TestEventToStore> callback = callbackCapture.getAllValues().get(0);
+        callback.onSuccess(eventCapture.getAllValues().get(0));
+        callback.onFail(eventCapture.getAllValues().get(0));
+        verify(confirmation, never()).reject();
+        verify(confirmation, never()).confirm();
+    }
+
+
+    @Test
+    @DisplayName("interruption leaves event batch delivery unacknowledged")
+    public void testEventBatchInterruption() throws Exception {
+        doThrow(new InterruptedException("test")).when(persistorMock).persist(any(), any());
+
+        EventID parentId = createRandomEventId();
+        Event first = start().name("sub-event-first").toProto(parentId);
+        Event second = start().name("sub-event-second").toProto(parentId);
+        eventStore.process(deliveryOf(parentId, first, second), confirmation);
+
+        // Thread.interrupted() clears the status to not affect other tests
+        assertTrue(Thread.interrupted(), "Thread interrupted status");
+        verify(persistorMock, times(1)).persist(any(), any());
+        verify(confirmation, never()).reject();
+        verify(confirmation, never()).confirm();
     }
 
 

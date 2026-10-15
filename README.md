@@ -73,7 +73,7 @@ Configuration is provided as `custom.json` file
 
 
 + _maxTaskCount_ - maximum number of events that will be processed simultaneously (default: 128)
-+ _maxTaskDataSize_ - maximum total data size of events during parallel processing (default: half of available memory)
++ _maxTaskDataSize_ - maximum total data size of events during parallel processing (default: half of the maximum heap size, i.e. `Runtime.maxMemory() / 2`)
 + _maxRetryCount_ - maximum number of retries that will be done in case of event persistence failure (default: 1000000)
 + _retryDelayBase_ - constant that will be used to calculate next retry time(ms) (default: 5000):
 retryDelayBase * retryNumber
@@ -82,7 +82,10 @@ retryDelayBase * retryNumber
 
 If some of these parameters are not provided, estore will use default(undocumented) value.
 If _maxTaskCount_ or _maxTaskDataSize_ limits are reached during processing, estore will pause processing new events 
-until some events are processed
+until some events are processed.
+An event (or event batch) bigger than _maxTaskDataSize_ is not rejected: estore waits until all queued events are processed
+and then persists it alone, all other events wait until it is persisted. Set _maxTaskDataSize_ above the size of the biggest
+expected event to keep parallel processing.
 
 # Common features
 
@@ -106,8 +109,13 @@ More details [here](doc/perftest-5.7.0-dev/perftest.md).
 
 ## 5.10.2
 
++ Fixed [#164](https://github.com/th2-net/th2-estore/issues/164): estore stopped consuming events without any error when an event bigger than _maxTaskDataSize_ was received
+  + default _maxTaskDataSize_ is half of the maximum heap size (`Runtime.maxMemory()`) instead of half of the heap size reserved by the JVM at startup (`Runtime.totalMemory()`)
+  + an event bigger than _maxTaskDataSize_ is persisted when the queue is empty instead of blocking the RabbitMQ consumer thread forever
+  + a delivery interrupted while waiting for the queue capacity (e.g. on shutdown) is left unacknowledged to be redelivered instead of being rejected
 + Updated:
-  + th2 gradle plugin: `0.3.14` (bom: `4.14.3`)
+  + th2 gradle plugin: `0.3.15` (bom: `4.14.3`)
+  + task-utils: `0.1.5`
   + cradle api: `5.7.1-dev`
   + common: `5.17.2-dev`
 + Fixed vulnerabilities by updating transitive dependencies:
