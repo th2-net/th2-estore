@@ -13,6 +13,7 @@ jobs:
     uses: th2-net/.github/.github/workflows/compound-java-dev.yml@main
     with:
       build-target: 'Docker,Sonatype'
+      integration-test-enabled: true
       docker-multi-platform: true
       docker-username: ${{ github.actor }}
     secrets:

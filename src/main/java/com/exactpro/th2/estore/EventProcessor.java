@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2023 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2026 Exactpro (Exactpro Systems Limited)
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -111,12 +111,18 @@ public class EventProcessor implements AutoCloseable {
 
     private void storeSingleEvents(List<Event> events, Confirmation confirmation) {
 
-        Callback<TestEventToStore> persistorCallback = new ProcessorCallback(confirmation, events.size());
+        ProcessorCallback persistorCallback = new ProcessorCallback(confirmation, events.size());
 
-        events.forEach((event) -> {
+        for (Event event : events) {
             try {
                 TestEventSingleToStore cradleEventSingle = toCradleEvent(event);
                 persist(cradleEventSingle, persistorCallback);
+            } catch (InterruptedException e) {
+                // the delivery is left unacknowledged, so the broker redelivers it after reconnection / restart
+                persistorCallback.abandon();
+                Thread.currentThread().interrupt();
+                LOGGER.warn("Interrupted on storing single event '{}', the delivery is left unacknowledged", shortDebugString(event.getId()), e);
+                break;
             } catch (Exception e) {
                 errorCollector.collect("Failed to process a single event");
                 if (LOGGER.isErrorEnabled()) {
@@ -125,7 +131,7 @@ public class EventProcessor implements AutoCloseable {
                 persistorCallback.onFail(null);
                 metrics.registerFailure();
             }
-        });
+        }
     }
 
 
@@ -145,6 +151,11 @@ public class EventProcessor implements AutoCloseable {
                 }
             });
 
+        } catch (InterruptedException e) {
+            // the delivery is left unacknowledged, so the broker redelivers it after reconnection / restart
+            Thread.currentThread().interrupt();
+            LOGGER.warn("Interrupted on storing event batch with parent '{}' and {} events, the delivery is left unacknowledged",
+                    shortDebugString(eventBatch.getParentEventId()), eventBatch.getEventsCount(), e);
         } catch (Exception e) {
             errorCollector.collect("Failed to process an event batch");
             if (LOGGER.isErrorEnabled()) {
@@ -246,6 +257,15 @@ public class EventProcessor implements AutoCloseable {
             checkAndRespond(responded, () -> reject(confirmation));
             if (persistedEvent != null) {
                 completed.put(persistedEvent, persistedEvent);
+            }
+        }
+
+        /**
+         * Prevents any response for the delivery, events submitted before are still stored
+         */
+        public void abandon() {
+            synchronized(responded) {
+                responded.set(true);
             }
         }
 

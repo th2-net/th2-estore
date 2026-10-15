@@ -1,5 +1,5 @@
 /*
- * Copyright 2020-2025 Exactpro (Exactpro Systems Limited)
+ * Copyright 2020-2026 Exactpro (Exactpro Systems Limited)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -223,8 +224,12 @@ public class TestEventPersistor {
 
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
-            for (int i = 0; i < totalEvents; i++)
-                persistor.persist(eventBatch, callback);
+            try {
+                for (int i = 0; i < totalEvents; i++)
+                    persistor.persist(eventBatch, callback);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         });
 
         new Thread(runnable).start();
@@ -271,8 +276,12 @@ public class TestEventPersistor {
 
         // setup producer thread
         StartableRunnable runnable = StartableRunnable.of(() -> {
-            for (int i = 0; i < totalEvents; i++)
-                persistor.persist(events[i], callback);
+            try {
+                for (int i = 0; i < totalEvents; i++)
+                    persistor.persist(events[i], callback);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         });
 
         new Thread(runnable).start();
@@ -286,6 +295,43 @@ public class TestEventPersistor {
 
         executor.shutdown();
         assertTrue(executor.awaitTermination(1, TimeUnit.SECONDS), "Executor didn't terminate according to a timeout");
+    }
+
+
+    @Test
+    @DisplayName("#164: event bigger than max queue data size doesn't block persistence")
+    public void testOversizedEvent() throws IOException, CradleStorageException, InterruptedException {
+
+        // event content exceeds the whole queue data capacity
+        final byte[] content = new byte[(int) MAX_EVENT_QUEUE_DATA_SIZE + 1];
+
+        BookId bookId = new BookId(BOOK_NAME);
+        Instant timestamp = Instant.now();
+        StoredTestEventId parentId = new StoredTestEventId(bookId, SCOPE, timestamp, "test-parent");
+
+        TestEventSingleToStore oversized = createEvent(bookId, SCOPE, parentId, "test-id-1", "test-event", timestamp, 0, content);
+        TestEventSingleToStore regular = createEvent(bookId, SCOPE, parentId, "test-id-2", "test-event", timestamp, 0);
+
+        // persist from a separate thread as estore does it from RabbitMQ consumer thread
+        Thread producer = new Thread(() -> {
+            try {
+                persistor.persist(oversized, callback);
+                persistor.persist(regular, callback);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }, "test-producer");
+        producer.setDaemon(true);
+        producer.start();
+        producer.join(WAIT_TIMEOUT);
+
+        assertFalse(producer.isAlive(), "Producer thread is blocked on persisting the oversized event");
+        verify(storageMock, after(EVENT_PERSIST_TIMEOUT).times(2)).storeTestEventAsync(any());
+        verify(callback, times(1)).onSuccess(oversized);
+        verify(callback, times(1)).onSuccess(regular);
+        verify(callback, times(0)).onFail(any());
+
+        producer.interrupt();
     }
 
 

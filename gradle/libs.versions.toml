@@ -6,13 +6,14 @@ vertx = "4.5.35"
 [libraries]
 th2-common-utils = { group = "com.exactpro.th2", name = "common-utils", version = "2.4.0-dev" }
 th2-common = { group = "com.exactpro.th2", name = "common", version = "5.17.2-dev" }
-th2-task-utils = { group = "com.exactpro.th2", name = "task-utils", version = "0.1.4" }
+th2-task-utils = { group = "com.exactpro.th2", name = "task-utils", version = "0.1.5" }
 
 cradle-core = { group = "com.exactpro.th2", name = "cradle-core", version.ref = "cradle" }
 cradle-cassandra = { group = "com.exactpro.th2", name = "cradle-cassandra", version.ref = "cradle" }
 
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "5.14.4" }
 mockito-junit-jupiter = { group = "org.mockito", name = "mockito-junit-jupiter", version = "5.24.0" }
+th2-junit-jupiter-integration = { group = "com.exactpro.th2", name = "junit-jupiter-integration", version = "0.2.1" }
 
 # Vulnerability fixes of transitive dependencies
 netty-bom = { group = "io.netty", name = "netty-bom", version = "4.2.19.Final" }
