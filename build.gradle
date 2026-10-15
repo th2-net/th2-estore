@@ -53,6 +53,12 @@ dependencies {
     testImplementation 'org.apache.commons:commons-lang3'
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.mockito.junit.jupiter)
+    testImplementation(libs.th2.junit.jupiter.integration) {
+        because("integration tests with RabbitMQ")
+    }
+    testImplementation(libs.amqp.client) {
+        because("integration tests check RabbitMQ queue state")
+    }
     testRuntimeOnly('org.junit.platform:junit-platform-launcher') {
         because 'This artifact will not be added automatically since gradle 9.0. You can read more information here:' +
                 'https://docs.gradle.org/8.3/userguide/upgrading_version_8.html#test_framework_implementation_dependencies'
@@ -106,7 +112,19 @@ application {
 }
 
 test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags('integration-test')
+    }
+}
+
+tasks.register('integrationTest', Test) {
+    group = 'verification'
+    description = 'Runs integration tests, requires docker'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags('integration-test')
+    }
 }
 
 dependencyCheck {
