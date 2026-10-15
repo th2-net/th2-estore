@@ -211,6 +211,8 @@ public class EventProcessorIntegrationTest {
         testFactory.getEventBatchRouter().send(batchOf(event("second", 0)), PIN);
         testFactory.getEventBatchRouter().send(batchOf(event("third", 0)), PIN);
         recordingPersistor.awaitBlockedConsumer(2);
+        // sending is asynchronous, the third delivery must be prefetched by estore before shutdown
+        awaitQueueContent(testFactory, 0);
 
         // the same order as estore shutdown hook uses
         processor.close();
