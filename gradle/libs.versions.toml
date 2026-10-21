@@ -20,7 +20,7 @@ netty-bom = { group = "io.netty", name = "netty-bom", version = "4.2.19.Final" }
 jackson-bom = { group = "com.fasterxml.jackson", name = "jackson-bom", version = "2.22.4" }
 kotlin-bom = { group = "org.jetbrains.kotlin", name = "kotlin-bom", version = "2.4.21" }
 log4j-bom = { group = "org.apache.logging.log4j", name = "log4j-bom", version = "2.26.1" }
-asm-bom = { group = "org.ow2.asm", name = "asm-bom", version = "9.11" }
+asm-bom = { group = "org.ow2.asm", name = "asm-bom", version = "9.11.1" }
 amqp-client = { group = "com.rabbitmq", name = "amqp-client", version = "5.37.0" }
 guava = { group = "com.google.guava", name = "guava", version = "33.7.2-jre" }
 lz4-java = { group = "at.yawk.lz4", name = "lz4-java", version = "1.12.0" }
